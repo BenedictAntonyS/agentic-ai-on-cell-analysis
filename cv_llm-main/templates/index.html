@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NeuroCell GAN Forecaster | AI-Driven Spatiotemporal Oncology Suite</title>
+  <meta name="description" content="State-of-the-art spatiotemporal Generative Adversarial Network for forecasting live neuroblastoma (SH-SY5Y) cell growth kinetics and automated Otsu segmentation.">
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔬</text></svg>">
+</head>
+<body>
+
+  <!-- ==========================================
+       TOP NAVIGATION BAR
+       ========================================== -->
+  <header class="app-header">
+    <div class="brand-group">
+      <div class="brand-icon-wrap">
+        🔬
+        <div class="brand-icon-pulse"></div>
+      </div>
+      <div>
+        <div class="brand-title">
+          NEURO<span>CELL</span> GAN
+          <span class="brand-badge">PRO v2.0</span>
+        </div>
+        <div class="brand-subtitle">Authentic Microscopy Time-Series & 200-Epoch GAN Forecaster</div>
+      </div>
+    </div>
+
+    <div class="nav-status-items">
+      <div class="status-pill">
+        <span class="dot-indicator" id="modelDot"></span>
+        <span id="statusModelText">Initializing GAN Engine...</span>
+      </div>
+      <div class="status-pill">
+        <span class="dot-indicator pulsing" style="background: var(--cyan-primary); box-shadow: 0 0 10px var(--cyan-primary);"></span>
+        <span>LIVECell Benchmark (SH-SY5Y)</span>
+      </div>
+      <input type="password" id="apiKeyInput" placeholder="Groq API Key (Optional)" style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-subtle); color: #fff; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; width: 190px;" title="Optional Groq API key for cloud VLM and Copilot. Core CV runs 100% locally.">
+      <button class="nav-action-btn" id="btnOpenArchitecture" title="Inspect deep learning model architecture and occlusion weights">
+        🧬 Model Architecture
+      </button>
+    </div>
+  </header>
+
+  <!-- ==========================================
+       MAIN WORKSPACE
+       ========================================== -->
+  <main class="main-wrapper">
+
+    <!-- HERO DASHBOARD BANNER -->
+    <section class="hero-banner" aria-labelledby="hero-title">
+      <div class="hero-content">
+        <h1 id="hero-title">Neuroblastoma (SH-SY5Y) Cell Proliferation Forecaster</h1>
+        <p>
+          Showcasing authentic phase-contrast microscopy time-series from the LIVECell benchmark dataset. Powered by the 200-epoch spatiotemporal ConvLSTM GAN trained on cellular dynamics, forecasting next-cycle mitotic expansion with ground-truth verification and explainable AI occlusion sensitivity.
+        </p>
+
+        <div class="hero-stats-row">
+          <div class="hero-stat-item">
+            <span class="hero-stat-val">200 Epochs</span>
+            <span class="hero-stat-lbl">Trained GAN Generator</span>
+          </div>
+          <div class="hero-stat-item">
+            <span class="hero-stat-val">Untouched</span>
+            <span class="hero-stat-lbl">Original Phase-Contrast Micrographs</span>
+          </div>
+          <div class="hero-stat-item">
+            <span class="hero-stat-val">Frame 1 (35.8%)</span>
+            <span class="hero-stat-lbl">Primary Occlusion Anchor</span>
+          </div>
+          <div class="hero-stat-item">
+            <span class="hero-stat-val">LLaMA 3.3 70B</span>
+            <span class="hero-stat-lbl">Dr. NeuroCell Bio-Copilot</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="dashboard-grid">
+
+      <!-- ==========================================
+           SECTION 1: INPUT SEQUENCE CONTROL STATION
+           ========================================== -->
+      <section class="panel-card" aria-labelledby="section-input-title">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <div class="panel-icon">🎞️</div>
+            <div>
+              <h2 class="panel-title" id="section-input-title">1. Authentic Time-Lapse Microscopy Sequence</h2>
+              <div class="panel-desc">Real, untouched phase-contrast microscopy frames captured at 4-hour intervals. Select a benchmark or upload custom frames.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preset Chips -->
+        <div class="preset-selector-bar">
+          <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Presets:</span>
+          <button class="preset-chip active" data-preset="livecell_b10_1" title="Real LIVECell B10_1 (FOV 4: 00h to 16h Real Microscopy)">
+            🔬 Real B10_1 (00h–16h FOV 4)
+          </button>
+          <button class="preset-chip" data-preset="livecell_b10_1_extended" title="Real LIVECell B10_1 (FOV 4: 20h to 36h Real Microscopy)">
+            🔬 Real B10_1 (20h–36h FOV 4)
+          </button>
+          <button class="preset-chip" data-preset="demo_synthetic_sequence" title="Bundled offline demonstration sequence (Labeled Synthetic)">
+            🧪 Sample Demo (Synthetic)
+          </button>
+        </div>
+
+        <!-- Drag & Drop Upload Zone -->
+        <div class="dropzone-container" id="fileDropzone" tabindex="0" role="button" aria-label="Drop 4 microscopy files here">
+          <input type="file" id="fileInput" multiple accept="image/*,.tif,.tiff" style="display: none;">
+          <div class="dropzone-icon">📁</div>
+          <div class="dropzone-title" id="dropzoneStatus">Drag & drop 4 consecutive microscopy images at once, or click to browse</div>
+          <div class="dropzone-hint">Supports full-resolution PNG, TIFF, BMP, JPG (preserved in original quality)</div>
+        </div>
+
+        <!-- 4-Frame Filmstrip Cards -->
+        <div class="filmstrip-row">
+          <!-- Frame T1 -->
+          <article class="frame-card" id="cardFrame_0">
+            <div class="frame-card-header">
+              <span class="frame-tag" id="frameTag_0">T1</span>
+              <span class="frame-time" id="frameTime_0">00h (0d 0h)</span>
+              <div class="frame-view-toggle" id="frameSubBtns_0">
+                <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
+                <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
+                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
+                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+              </div>
+            </div>
+            <div class="frame-media-wrap">
+              <img id="frameImg_0" class="frame-img" alt="Frame T1 Microscopy">
+            </div>
+            <div class="frame-card-footer">
+              <span class="frame-metric-pill" id="frameMetric_0">Loading...</span>
+            </div>
+          </article>
+
+          <!-- Frame T2 -->
+          <article class="frame-card" id="cardFrame_1">
+            <div class="frame-card-header">
+              <span class="frame-tag" id="frameTag_1">T2</span>
+              <span class="frame-time" id="frameTime_1">04h (+4h)</span>
+              <div class="frame-view-toggle" id="frameSubBtns_1">
+                <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
+                <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
+                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
+                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+              </div>
+            </div>
+            <div class="frame-media-wrap">
+              <img id="frameImg_1" class="frame-img" alt="Frame T2 Microscopy">
+            </div>
+            <div class="frame-card-footer">
+              <span class="frame-metric-pill" id="frameMetric_1">Loading...</span>
+            </div>
+          </article>
+
+          <!-- Frame T3 -->
+          <article class="frame-card" id="cardFrame_2">
+            <div class="frame-card-header">
+              <span class="frame-tag" id="frameTag_2">T3</span>
+              <span class="frame-time" id="frameTime_2">08h (+8h)</span>
+              <div class="frame-view-toggle" id="frameSubBtns_2">
+                <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
+                <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
+                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
+                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+              </div>
+            </div>
+            <div class="frame-media-wrap">
+              <img id="frameImg_2" class="frame-img" alt="Frame T3 Microscopy">
+            </div>
+            <div class="frame-card-footer">
+              <span class="frame-metric-pill" id="frameMetric_2">Loading...</span>
+            </div>
+          </article>
+
+          <!-- Frame T4 -->
+          <article class="frame-card" id="cardFrame_3">
+            <div class="frame-card-header">
+              <span class="frame-tag" id="frameTag_3">T4</span>
+              <span class="frame-time" id="frameTime_3">12h (+12h)</span>
+              <div class="frame-view-toggle" id="frameSubBtns_3">
+                <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
+                <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
+                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
+                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+              </div>
+            </div>
+            <div class="frame-media-wrap">
+              <img id="frameImg_3" class="frame-img" alt="Frame T4 Microscopy">
+            </div>
+            <div class="frame-card-footer">
+              <span class="frame-metric-pill" id="frameMetric_3">Loading...</span>
+            </div>
+          </article>
+        </div>
+
+        <!-- Action Execution Strip -->
+        <div class="action-strip">
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">
+            Active Sequence: <strong id="activeSeqLabel" style="color: var(--cyan-primary);">LIVECell B10_1 (FOV 4)</strong>
+          </div>
+          <button class="btn-primary-glow" id="btnExecute">
+            <span class="spinner" id="btnExecuteSpinner" style="display: none;"></span>
+            <span id="btnExecuteText">⚡ EXECUTE GAN FORECAST (T+1)</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           SECTION 2: FORECAST & QUANTITATIVE SCOREBOARD
+           ========================================== -->
+      <section class="panel-card" aria-labelledby="section-results-title">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <div class="panel-icon">🎯</div>
+            <div>
+              <h2 class="panel-title" id="section-results-title">2. Forecast Horizon & Cellular Growth Scoreboard</h2>
+              <div class="panel-desc">Quantitative dynamics, proliferation delta, and microscopic horizon synthesis.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5-Column Metric Scoreboard -->
+        <div class="metric-scoreboard">
+          <div class="metric-cell">
+            <span class="metric-sub">Forecasted Confluence (T5)</span>
+            <span class="metric-num" id="metricConfluence">--%</span>
+            <span class="metric-trend positive" id="trendDeltaConf">▲ Dynamic Increase</span>
+          </div>
+
+          <div class="metric-cell green">
+            <span class="metric-sub">Ground Truth Confluence</span>
+            <span class="metric-num" id="metricTargetConf" style="color: var(--emerald-accent);">--%</span>
+            <span class="metric-trend" style="color: var(--emerald-accent);" id="lblTargetConf">Real 16h Measurement</span>
+          </div>
+
+          <div class="metric-cell purple">
+            <span class="metric-sub">Confluence Delta (Δ)</span>
+            <span class="metric-num" id="metricDeltaConf" style="color: var(--violet-accent);">--%</span>
+            <span class="metric-trend" style="color: var(--violet-accent);">Net Growth from T4</span>
+          </div>
+
+          <div class="metric-cell amber">
+            <span class="metric-sub">GAN Model Fidelity (IoU)</span>
+            <span class="metric-num" id="metricIoU" style="color: var(--amber-accent);">--</span>
+            <span class="metric-trend" style="color: var(--amber-accent);" id="lblIoUTrend">Intersection over Union</span>
+          </div>
+
+          <div class="metric-cell">
+            <span class="metric-sub">Doubling Time Kinetics</span>
+            <span class="metric-num" id="metricDoublingTime">-- hrs</span>
+            <span class="metric-trend" style="color: var(--blue-accent);">Exponential Model</span>
+          </div>
+        </div>
+
+        <!-- Split Analytics: Before/After Slider & Multi-View Inspection -->
+        <div class="analytics-split-grid">
+
+          <!-- Left: Before / After Slider -->
+          <div class="comparator-box">
+            <div class="comparator-header">
+              <span class="comparator-title">Original Horizon Slider: Frame T4 (12h) vs Frame T5 (16h Ground Truth)</span>
+              <span class="brand-badge" style="font-size: 0.65rem;">Drag Handle</span>
+            </div>
+            <div class="slider-container" id="comparatorSlider">
+              <img id="sliderBeforeImg" class="slider-img before" alt="Frame T4 (12h)">
+              <img id="sliderAfterImg" class="slider-img after" alt="Frame T5 (16h)">
+              <div class="slider-divider" id="sliderDivider"></div>
+              <div class="slider-handle" id="sliderHandle">↔</div>
+            </div>
+            <div class="comparator-labels">
+              <span>◄ Frame T4 (12h Observed)</span>
+              <span>Frame T5 (16h Ground Truth) ►</span>
+            </div>
+          </div>
+
+          <!-- Right: Multi-View Inspection Tabs -->
+          <div class="multiview-box">
+            <div class="view-tabs">
+              <button class="tab-btn active" data-tab="target_raw">🔬 Real Micrograph (T5)</button>
+              <button class="tab-btn" data-tab="pred_mask">🎯 GAN Predicted Mask</button>
+              <button class="tab-btn" data-tab="target_mask">🔳 Ground Truth Mask</button>
+              <button class="tab-btn" data-tab="overlay">🧬 GAN vs Truth Overlay</button>
+              <button class="tab-btn" data-tab="pred_annot">🔍 Contours on Original</button>
+            </div>
+            <div class="tab-display-canvas-wrap">
+              <img id="tabDisplayImg" class="tab-display-img" alt="Multi-view Display">
+            </div>
+            <div class="tab-caption">
+              <strong id="tabCaptionTitle" style="color: var(--cyan-primary);">🔬 Real Original Micrograph (T5 Ground Truth)</strong>
+              <span id="tabCaptionDesc" style="color: var(--text-muted); font-family: var(--font-mono); font-size: 0.78rem;">Loading...</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Proliferation Kinetic Chart -->
+        <div class="chart-container-card">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.8rem;">
+            <div>
+              <h3 style="font-size: 1.05rem; font-family: var(--font-display); color: #fff;">📈 Cellular Proliferation Kinetics & Confluence Curve</h3>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">Solid line: Historical time-lapse observations | Dashed line: Generative GAN trajectory forecast</span>
+            </div>
+            <span class="brand-badge">Interactive Canvas</span>
+          </div>
+          <div class="chart-canvas-wrap">
+            <canvas id="growthChartCanvas"></canvas>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ==========================================
+           SECTION 3: EXPLAINABLE AI (XAI) OCCLUSION SENSITIVITY
+           ========================================== -->
+      <section class="panel-card" aria-labelledby="section-xai-title">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <div class="panel-icon">🔥</div>
+            <div>
+              <h2 class="panel-title" id="section-xai-title">3. Explainable AI (XAI) — Spatiotemporal Occlusion Sensitivity</h2>
+              <div class="panel-desc">
+                Sliding window patch (16×16 px, step 8 px) calculating exact MAE degradation per frame under localized occlusion. Visualized with JET colormap (<code style="color: #67e8f9;">cmap='jet'</code>).
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span style="font-size: 0.78rem; color: var(--text-muted);">Display:</span>
+            <button class="view-subbtn active" id="btnXaiPure" style="padding: 0.35rem 0.8rem;">Pure JET</button>
+            <button class="view-subbtn" id="btnXaiOverlay" style="padding: 0.35rem 0.8rem;">Micrograph Overlay</button>
+          </div>
+        </div>
+
+        <!-- 2-Row x 4-Column XAI Visual Grid -->
+        <div style="display: flex; flex-direction: column; gap: 1.2rem; margin-top: 0.5rem;">
+
+          <!-- Row 1: Original Frames -->
+          <div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #fff; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.4rem;">
+              <span>🖼️</span> Original Phase-Contrast Micrographs:
+            </div>
+            <div class="filmstrip-row" style="grid-template-columns: repeat(4, 1fr);">
+              <div class="frame-card">
+                <div class="frame-card-header"><span class="frame-tag">T1</span><span class="frame-time">00h (0d 0h)</span></div>
+                <div class="frame-media-wrap"><img id="xaiOrigImg_0" class="frame-img" alt="Original Frame 1"></div>
+              </div>
+              <div class="frame-card">
+                <div class="frame-card-header"><span class="frame-tag">T2</span><span class="frame-time">04h (+4h)</span></div>
+                <div class="frame-media-wrap"><img id="xaiOrigImg_1" class="frame-img" alt="Original Frame 2"></div>
+              </div>
+              <div class="frame-card">
+                <div class="frame-card-header"><span class="frame-tag">T3</span><span class="frame-time">08h (+8h)</span></div>
+                <div class="frame-media-wrap"><img id="xaiOrigImg_2" class="frame-img" alt="Original Frame 3"></div>
+              </div>
+              <div class="frame-card">
+                <div class="frame-card-header"><span class="frame-tag">T4</span><span class="frame-time">12h (+12h)</span></div>
+                <div class="frame-media-wrap"><img id="xaiOrigImg_3" class="frame-img" alt="Original Frame 4"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 2: Occlusion Heatmaps (JET) -->
+          <div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #fff; margin-bottom: 0.6rem; display: flex; align-items: center; gap: 0.4rem;">
+              <span>🔥</span> Occlusion Sensitivity Heatmaps (<code style="color: #67e8f9; font-size: 0.8rem;">cmap='jet'</code>):
+            </div>
+            <div class="filmstrip-row" style="grid-template-columns: repeat(4, 1fr);">
+              <!-- Frame 1 Occlusion -->
+              <div class="frame-card" style="border-color: rgba(0, 245, 255, 0.4);">
+                <div class="frame-card-header">
+                  <span class="frame-tag" style="background: rgba(0, 245, 255, 0.2); color: #00f5ff;">Frame 1</span>
+                  <span class="frame-time" id="xaiPctBadge_0" style="color: #00f5ff; font-weight: 700;">35.8% Impact</span>
+                </div>
+                <div class="frame-media-wrap"><img id="xaiHeatImg_0" class="frame-img" alt="Occlusion Heatmap Frame 1"></div>
+                <div class="frame-card-footer">
+                  <span class="frame-metric-pill" style="font-size: 0.72rem; color: #cbd5e1;">Base Topology & Centroid Anchor</span>
+                </div>
+              </div>
+
+              <!-- Frame 2 Occlusion -->
+              <div class="frame-card">
+                <div class="frame-card-header">
+                  <span class="frame-tag">Frame 2</span>
+                  <span class="frame-time" id="xaiPctBadge_1" style="color: #60a5fa; font-weight: 700;">5.9% Impact</span>
+                </div>
+                <div class="frame-media-wrap"><img id="xaiHeatImg_1" class="frame-img" alt="Occlusion Heatmap Frame 2"></div>
+                <div class="frame-card-footer">
+                  <span class="frame-metric-pill" style="font-size: 0.72rem; color: #cbd5e1;">Early Velocity Vector</span>
+                </div>
+              </div>
+
+              <!-- Frame 3 Occlusion -->
+              <div class="frame-card">
+                <div class="frame-card-header">
+                  <span class="frame-tag">Frame 3</span>
+                  <span class="frame-time" id="xaiPctBadge_2" style="color: var(--violet-accent); font-weight: 700;">5.1% Impact</span>
+                </div>
+                <div class="frame-media-wrap"><img id="xaiHeatImg_2" class="frame-img" alt="Occlusion Heatmap Frame 3"></div>
+                <div class="frame-card-footer">
+                  <span class="frame-metric-pill" style="font-size: 0.72rem; color: #cbd5e1;">Mid-Phase Flow Continuity</span>
+                </div>
+              </div>
+
+              <!-- Frame 4 Occlusion -->
+              <div class="frame-card">
+                <div class="frame-card-header">
+                  <span class="frame-tag">Frame 4</span>
+                  <span class="frame-time" id="xaiPctBadge_3" style="color: var(--emerald-accent); font-weight: 700;">3.0% Impact</span>
+                </div>
+                <div class="frame-media-wrap"><img id="xaiHeatImg_3" class="frame-img" alt="Occlusion Heatmap Frame 4"></div>
+                <div class="frame-card-footer">
+                  <span class="frame-metric-pill" style="font-size: 0.72rem; color: #cbd5e1;">Local Boundary Extrapolation</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Colormap Legend & Summary -->
+          <div style="background: rgba(7, 10, 18, 0.6); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 0.9rem 1.2rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8rem;">
+            <div style="font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5; max-width: 650px;">
+              <strong style="color: #fff;">Interpretation:</strong> Red / Yellow zones indicate regions where occluding a 16×16 px patch caused the sharpest increase in Mean Absolute Error (MAE). <strong>Frame 1 accounts for ~35.8% of total network attention</strong> because it provides the foundational colony coordinate matrix upon which ConvLSTM velocity vectors are established.
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.75rem;">
+              <span>Low Impact</span>
+              <div style="width: 120px; height: 14px; border-radius: 3px; background: linear-gradient(90deg, #000080, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000, #800000);"></div>
+              <span>High Impact</span>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ==========================================
+           SECTION 4: MULTIMODAL VISION-LANGUAGE MODEL (VLM)
+           ========================================== -->
+      <section class="panel-card" aria-labelledby="section-vlm-title">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <div class="panel-icon" style="background: rgba(0, 245, 255, 0.2); border-color: var(--cyan-primary);">👁️</div>
+            <div>
+              <h2 class="panel-title" id="section-vlm-title">4. Multimodal Vision-Language Model (VLM) Image Understanding</h2>
+              <div class="panel-desc">Direct visual image understanding powered by Groq Llama 3.2 Vision. Inspects actual pixel morphology, boundaries, and diffraction halos alongside verified CV metrics.</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.6rem; align-items: center;">
+            <span class="brand-badge" style="background: rgba(0, 245, 255, 0.15); border-color: var(--cyan-primary); color: #00f5ff;">VLM</span>
+            <span class="brand-badge" style="font-size: 0.65rem;">Direct Pixel Input</span>
+          </div>
+        </div>
+
+        <div style="padding: 1rem 1.4rem; background: rgba(15, 23, 42, 0.6); border-bottom: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.8rem;">
+            <div style="display: flex; gap: 0.8rem; align-items: center;">
+              <label for="vlmFrameSelect" style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">Inspect Frames:</label>
+              <select id="vlmFrameSelect" class="chat-input" style="width: auto; padding: 0.4rem 0.8rem;">
+                <option value="current_and_forecast">Frame 4 (Current) + Predicted Frame 5</option>
+                <option value="initial_and_current">Frame 1 (Initial Horizon) + Frame 4 (Current)</option>
+                <option value="frame4_only">Frame 4 Only (High-Resolution Micrograph)</option>
+                <option value="contours_overlay">Frame 4 Segmented Contours Map</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 0.6rem; align-items: center;">
+              <label for="vlmModelSelect" style="font-size: 0.85rem; color: #94a3b8; font-weight: 600;">Vision Model:</label>
+              <select id="vlmModelSelect" class="chat-input" style="width: auto; padding: 0.4rem 0.8rem;">
+                <option value="llama-3.2-11b-vision-preview">Llama 3.2 11B Vision Preview</option>
+                <option value="llama-3.2-90b-vision-preview">Llama 3.2 90B Vision Preview</option>
+                <option value="qwen/qwen3.6-27b">Qwen 3.6 27B Vision</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="font-size: 0.8rem; color: #f59e0b; background: rgba(120, 53, 15, 0.2); border-left: 3px solid #f59e0b; padding: 0.5rem 0.8rem; border-radius: 4px;">
+            ⚠️ <strong>Data Transmission Notice:</strong> Clicking "Analyze with VLM" transmits compressed base64 image data to the configured cloud vision API (Groq). If on-premise isolation is required, leave the API key blank or use the local Computer Vision pipeline below.
+          </div>
+
+          <div class="prompt-chips-row" style="margin-top: 0.2rem;">
+            <button class="chip-btn vlm-preset-btn">Describe visible optical evidence, cell density, and spatial distribution</button>
+            <button class="chip-btn vlm-preset-btn">Where are the largest confluent clusters and spatial growth hotspots?</button>
+            <button class="chip-btn vlm-preset-btn">Inspect optical quality, diffraction halos, and potential segmentation artifacts</button>
+            <button class="chip-btn vlm-preset-btn">Compare Frame 4 against the predicted Frame 5 for biological plausibility</button>
+          </div>
+
+          <div class="chat-input-row" style="margin-top: 0.2rem;">
+            <input type="text" class="chat-input" id="vlmQueryInput" placeholder="Ask the Vision Model about visible features in the micrographs..." aria-label="VLM Query Input" value="Describe visible optical features, cell cluster density, and spatial distribution.">
+            <button class="nav-action-btn" id="btnRunVlm" style="background: rgba(0, 245, 255, 0.2); border-color: var(--cyan-primary); color: #fff; padding: 0.6rem 1.4rem;">
+              👁️ Analyze with VLM
+            </button>
+          </div>
+        </div>
+
+        <div style="padding: 1.4rem;">
+          <div class="report-box" id="vlmResultContent" style="min-height: 180px;">
+            <div style="text-align: center; padding: 2rem; color: #94a3b8;">
+              <p style="font-size: 1.1rem; margin-bottom: 0.5rem; color: #fff;">👁️ Vision-Language Model Ready</p>
+              <p style="font-size: 0.85rem;">Select image frames and click "Analyze with VLM" to submit real microscopy frames to the multimodal vision model.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==========================================
+           SECTION 5: DR. NEUROCELL AI COPILOT & CLINICAL REPORT
+           ========================================== -->
+      <section class="panel-card" aria-labelledby="section-copilot-title">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <div class="panel-icon">🧬</div>
+            <div>
+              <h2 class="panel-title" id="section-copilot-title">5. Dr. NeuroCell AI Bio-Oncology Copilot</h2>
+              <div class="panel-desc">Clinical and biological reasoning powered by Groq LLaMA 3.3 70B Versatile.</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.6rem;">
+            <button class="nav-action-btn" id="btnGenerateReport">
+              📄 Generate Clinical Report
+            </button>
+            <button class="nav-action-btn" id="btnCopyReport" title="Copy markdown to clipboard">
+              📋 Copy
+            </button>
+          </div>
+        </div>
+
+        <div class="copilot-section">
+
+          <!-- Left: Clinical Report View -->
+          <div class="report-panel">
+            <h3 style="font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 0.4rem;">
+              <span>📋</span> Formal Bio-Oncology Evaluation Report
+            </h3>
+            <div class="report-box" id="reportContent">
+              <div style="text-align: center; padding: 2rem; color: #94a3b8;">
+                <p style="font-size: 1.1rem; margin-bottom: 0.5rem; color: #fff;">📊 Ready for Evaluation</p>
+                <p style="font-size: 0.85rem; margin-bottom: 1.2rem;">Click "Generate Clinical Report" to synthesize an in-depth biological evaluation of the growth kinetics and occlusion sensitivity.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Interactive Q&A Chat -->
+          <div class="chat-panel">
+            <h3 style="font-size: 0.95rem; color: #fff; display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem;">
+              <span>💬</span> Interactive Research Chat
+            </h3>
+            <div class="chat-stream" id="chatStream">
+              <div class="chat-bubble assistant">
+                Hello! I am <strong>Dr. NeuroCell AI</strong>. I specialize in Neuroblastoma (SH-SY5Y) dynamics, GAN forecasting, and spatiotemporal occlusion sensitivity. Ask me anything or explore the automated clinical report!
+              </div>
+            </div>
+
+            <div class="prompt-chips-row">
+              <button class="chip-btn">Explain Frame 1 occlusion sensitivity</button>
+              <button class="chip-btn">Estimate doubling time</button>
+              <button class="chip-btn">Recommended passage window</button>
+            </div>
+
+            <div class="chat-input-row">
+              <input type="text" class="chat-input" id="chatInput" placeholder="Ask Dr. NeuroCell AI about the model, cells, or dynamics..." aria-label="Chat input">
+              <button class="btn-send" id="btnChatSend">Send</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ==========================================
+           SECTION 5: AI AGENT — MULTI-STEP AUTONOMOUS REASONING
+           ========================================== -->
+      <section class="panel-card" aria-labelledby="section-agent-title" id="agentSection">
+        <div class="panel-header">
+          <div class="panel-title-wrap">
+            <div class="panel-icon" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.3), rgba(0, 245, 255, 0.15)); border-color: rgba(168, 85, 247, 0.4);">🤖</div>
+            <div>
+              <h2 class="panel-title" id="section-agent-title">6. Dr. NeuroCell AI Agent — Autonomous Multi-Step Reasoning</h2>
+              <div class="panel-desc">An agentic ReAct-loop that autonomously <strong>plans</strong> a research strategy, <strong>invokes specialized tools</strong> (metric analysis, XAI interpretation, experiment recommendations, model debugging), and <strong>synthesizes</strong> a comprehensive final answer.</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <span class="brand-badge" style="background: rgba(168, 85, 247, 0.2); border-color: rgba(168, 85, 247, 0.5); color: #c084fc;">AGENTIC</span>
+            <span class="brand-badge" style="font-size: 0.65rem;">ReAct Loop</span>
+          </div>
+        </div>
+
+        <!-- Agent Tool Capability Cards -->
+        <div class="agent-tools-grid" id="agentToolsGrid">
+          <div class="agent-tool-card" data-tool="analyze_metrics">
+            <div class="agent-tool-icon">📊</div>
+            <div class="agent-tool-name">analyze_metrics</div>
+            <div class="agent-tool-desc">Quantitative GAN output metrics — confluence, IoU, delta, doubling time</div>
+          </div>
+          <div class="agent-tool-card" data-tool="interpret_xai">
+            <div class="agent-tool-icon">🔥</div>
+            <div class="agent-tool-name">interpret_xai</div>
+            <div class="agent-tool-desc">XAI occlusion sensitivity — temporal frame weights &amp; spatial anchoring</div>
+          </div>
+          <div class="agent-tool-card" data-tool="recommend_experiments">
+            <div class="agent-tool-icon">🧪</div>
+            <div class="agent-tool-name">recommend_experiments</div>
+            <div class="agent-tool-desc">Actionable downstream protocols — assay timing, passage, IC50 window</div>
+          </div>
+          <div class="agent-tool-card" data-tool="debug_model">
+            <div class="agent-tool-icon">🔬</div>
+            <div class="agent-tool-name">debug_model</div>
+            <div class="agent-tool-desc">GAN fidelity audit — failure modes, prediction discrepancy analysis</div>
+          </div>
+          <div class="agent-tool-card" data-tool="forecast_trends">
+            <div class="agent-tool-icon">📈</div>
+            <div class="agent-tool-name">forecast_trends</div>
+            <div class="agent-tool-desc">Trajectory projection — time-to-confluence, passage window, saturation</div>
+          </div>
+        </div>
+
+        <!-- Agent Query Input -->
+        <div class="agent-input-panel">
+          <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.7rem; font-weight: 500;">
+            🤖 Ask the Agent — it will autonomously plan, invoke tools, and synthesize a research answer:
+          </div>
+
+          <!-- Preset Agent Query Chips -->
+          <div class="agent-chips-row">
+            <button class="agent-chip" data-query="Comprehensively analyze the current neuroblastoma growth experiment, interpret XAI results, and recommend next steps.">🔬 Full Analysis</button>
+            <button class="agent-chip" data-query="When should I passage the cells? Forecast the growth trajectory and recommend the optimal experimental window.">⏱️ Passage Timing</button>
+            <button class="agent-chip" data-query="Evaluate the GAN model's prediction quality and explain any discrepancies versus ground truth.">🎯 Model Debug</button>
+            <button class="agent-chip" data-query="Explain the XAI occlusion sensitivity results — why does Frame 1 carry such high importance?">🔥 XAI Deep-Dive</button>
+            <button class="agent-chip" data-query="Is the current confluence level suitable for initiating an IC50 drug sensitivity assay?">💊 Drug Assay Window</button>
+          </div>
+
+          <div class="agent-input-row">
+            <input type="text" class="agent-query-input" id="agentQueryInput"
+              placeholder="Enter your research question for the autonomous agent..." aria-label="Agent query input">
+            <button class="btn-agent-run" id="btnRunAgent">
+              <span class="spinner" id="agentSpinner" style="display: none;"></span>
+              <span id="agentBtnText">🤖 Run Agent</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Agent Execution Trace Viewer -->
+        <div class="agent-trace-container" id="agentTraceContainer" style="display: none;">
+          <div class="agent-trace-header">
+            <span style="font-size: 0.9rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+              <span id="agentStatusDot" class="dot-indicator pulsing" style="background: var(--violet-accent); box-shadow: 0 0 10px var(--violet-accent);"></span>
+              Agent Execution Trace
+            </span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <span style="font-size: 0.75rem; color: var(--text-muted);" id="agentStepCount">0 steps</span>
+              <button class="view-subbtn" id="btnClearTrace" style="padding: 0.3rem 0.7rem; font-size: 0.75rem;">Clear</button>
+            </div>
+          </div>
+          <div class="agent-trace-steps" id="agentTraceSteps"></div>
+        </div>
+
+        <!-- Agent Final Answer Panel -->
+        <div class="agent-final-answer" id="agentFinalAnswer" style="display: none;">
+          <div class="agent-final-header">
+            <span>✅ Agent Synthesized Response</span>
+            <button class="view-subbtn" id="btnCopyAgentAnswer" style="padding: 0.3rem 0.7rem; font-size: 0.75rem;">📋 Copy</button>
+          </div>
+          <div class="agent-final-content" id="agentFinalContent"></div>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ==========================================
+       ARCHITECTURE & OCCLUSION MODAL
+       ========================================== -->
+  <div class="modal-overlay" id="architectureModal" role="dialog" aria-modal="true" aria-labelledby="modal-arch-title">
+    <div class="modal-content">
+      <button class="modal-close" id="btnCloseModal" aria-label="Close modal">&times;</button>
+      <h2 id="modal-arch-title" style="font-family: var(--font-display); font-size: 1.4rem; color: #fff; margin-bottom: 0.8rem; display: flex; align-items: center; gap: 0.5rem;">
+        <span>🧬</span> Deep Learning GAN Architecture & Occlusion Sensitivity
+      </h2>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.2rem; line-height: 1.6;">
+        Trained for <strong>200 Epochs</strong> on the benchmark <strong>LIVECell</strong> dataset of SH-SY5Y Neuroblastoma label-free phase-contrast micrographs.
+      </p>
+
+      <div style="background: rgba(7, 10, 18, 0.7); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1.2rem; margin-bottom: 1.2rem;">
+        <h4 style="color: var(--cyan-primary); font-size: 0.9rem; margin-bottom: 0.4rem;">Generator Pipeline:</h4>
+        <p style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.6;">
+          • Input Tensor: <code>(Batch, 4, 128, 128, 1)</code> representing 4 consecutive time-lapse steps.<br>
+          • Architecture: Spatiotemporal feature extraction via ConvLSTM2D units, decoded via Conv2D layers with sigmoid activations.<br>
+          • Output: Synthesized horizon mask <code>(Batch, 128, 128, 1)</code>.
+        </p>
+      </div>
+
+      <div style="background: rgba(7, 10, 18, 0.7); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 1.2rem;">
+        <h4 style="color: var(--violet-accent); font-size: 0.9rem; margin-bottom: 0.4rem;">Occlusion Sensitivity Breakdown:</h4>
+        <p style="font-size: 0.82rem; color: #cbd5e1; line-height: 1.6; margin-bottom: 0.8rem;">
+          Occlusion ablation studies in notebook Cell 1 demonstrated that <strong>Frame 1 accounts for ~35.8%</strong> of output fidelity, because the initial frame establishes the foundational colony topology and centroid coordinates upon which local velocity vectors are propagated.
+        </p>
+        <div style="display: flex; gap: 0.5rem; flex-direction: column; font-family: var(--font-mono); font-size: 0.78rem;">
+          <div style="display: flex; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 0.35rem 0.6rem; border-radius: 4px;">
+            <span>Frame 1 (T1) Initial Topology</span>
+            <strong style="color: var(--cyan-primary);">35.8% Impact</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 0.35rem 0.6rem; border-radius: 4px;">
+            <span>Frame 2 (T2) Early Velocity</span>
+            <strong style="color: #60a5fa;">5.9% Impact</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 0.35rem 0.6rem; border-radius: 4px;">
+            <span>Frame 3 (T3) Mid-Phase Flow</span>
+            <strong style="color: var(--violet-accent);">5.1% Impact</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; background: rgba(255,255,255,0.03); padding: 0.35rem 0.6rem; border-radius: 4px;">
+            <span>Frame 4 (T4) Local Boundary</span>
+            <strong style="color: var(--emerald-accent);">3.0% Impact</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/static/js/chart.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

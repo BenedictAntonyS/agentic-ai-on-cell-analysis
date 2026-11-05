@@ -1,0 +1,52 @@
+# Jupyter Notebooks (Explicitly excluded)
+*.ipynb
+.ipynb_checkpoints/
+
+# Image files & formats (Explicitly excluded)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
+*.svg
+*.ico
+
+# Image datasets and extracted archives
+archive/
+ordered_archive/
+sorted_by_well/
+sorted_multiples_of_4/
+archive.zip
+
+# Large data archives
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+
+# Python cache & artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Environments
+env/
+venv/
+ENV/
+.venv/
+
+# Environment variables & secrets
+.env
+.env.local
+
+# Editor directories
+.vscode/
+.idea/
+*.swp
+*.swo
