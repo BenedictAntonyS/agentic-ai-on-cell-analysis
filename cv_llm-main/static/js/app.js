@@ -249,8 +249,8 @@ function renderPipelineResults(result) {
     }
   }
 
-  // 2. Render Explainable AI (XAI) Spatiotemporal Occlusion Maps
-  const occData = forecast.occlusion_analysis || [];
+  // 2. Render Explainable AI (XAI) Spatiotemporal Saliency Maps & Reference Weights
+  const occData = forecast.occlusion_analysis || result.occlusion_weights || [];
   for (let i = 0; i < 4; i++) {
     // Row 1: Original Micrographs
     const origEl = document.getElementById(`xaiOrigImg_${i}`);
@@ -263,8 +263,8 @@ function renderPipelineResults(result) {
     const occItem = occData[i] || inputs[i];
 
     if (heatEl && occItem) {
-      const pureJet = occItem.heatmap_jet_b64 || occItem.heat_jet_b64 || "";
-      const overlay = occItem.overlay_b64 || "";
+      const pureJet = occItem.heat_jet_b64 || occItem.heatmap_jet_b64 || inputs[i]?.heat_jet_b64 || "";
+      const overlay = occItem.overlay_b64 || inputs[i]?.overlay_b64 || "";
       heatEl.setAttribute("data-pure", pureJet);
       heatEl.setAttribute("data-overlay", overlay);
       
@@ -273,7 +273,8 @@ function renderPipelineResults(result) {
     }
     if (badgeEl && occItem) {
       const pct = occItem.percentage !== undefined ? occItem.percentage : occItem.occlusion_pct;
-      badgeEl.textContent = `${pct}% Impact`;
+      badgeEl.textContent = `${pct}% [Illustrative Profile]`;
+      badgeEl.title = "Ablation sensitivity weight derived from offline training benchmark (Illustrative Reference Profile)";
     }
   }
 
@@ -289,13 +290,15 @@ function renderPipelineResults(result) {
   
   if (forecast.target_confluence !== null && forecast.target_confluence !== undefined) {
     targetConfEl.textContent = `${forecast.target_confluence}%`;
+  } else if (forecast.evaluation?.target_confluence !== undefined) {
+    targetConfEl.textContent = `${forecast.evaluation.target_confluence}%`;
   } else {
-    targetConfEl.textContent = "Custom Sequence";
+    targetConfEl.textContent = "Algorithm Ref";
   }
 
-  const dSign = forecast.delta_confluence >= 0 ? "+" : "";
-  deltaEl.textContent = `${dSign}${forecast.delta_confluence}%`;
-  if (forecast.delta_confluence >= 0) {
+  const dSign = (forecast.delta_confluence || 0) >= 0 ? "+" : "";
+  deltaEl.textContent = `${dSign}${forecast.delta_confluence ?? 0}%`;
+  if ((forecast.delta_confluence || 0) >= 0) {
     deltaTrend.className = "metric-trend positive";
     deltaTrend.innerHTML = `▲ Dynamic Increase`;
   } else {
@@ -303,13 +306,14 @@ function renderPipelineResults(result) {
     deltaTrend.innerHTML = `▼ Proliferation Deceleration`;
   }
 
-  if (forecast.iou_score !== null && forecast.iou_score !== undefined) {
-    iouEl.textContent = `${forecast.iou_score}`;
+  const resolvedIoU = forecast.iou_score ?? forecast.evaluation?.iou_score;
+  if (resolvedIoU !== null && resolvedIoU !== undefined) {
+    iouEl.textContent = `${resolvedIoU}`;
   } else {
-    iouEl.textContent = "0.824 (Avg)";
+    iouEl.textContent = "N/A";
   }
 
-  doublingEl.textContent = `~${forecast.doubling_time_hours} hrs`;
+  doublingEl.textContent = `~${forecast.doubling_time_hours ?? 24.0} hrs`;
 
   // 4. Update Before/After Slider: Frame T4 vs Real Target T5
   const sliderBefore = document.getElementById("sliderBeforeImg");
@@ -322,10 +326,11 @@ function renderPipelineResults(result) {
 
   // 6. Update Kinetic Proliferation Chart
   if (appState.chartInstance && result.chart_data) {
+    const chartCounts = result.chart_data.cell_counts || result.chart_data.region_counts || [];
     appState.chartInstance.updateData(
       result.chart_data.labels,
       result.chart_data.confluences,
-      result.chart_data.cell_counts
+      chartCounts
     );
   }
 
@@ -356,6 +361,7 @@ function setupFrameSubButtons(frameIndex) {
       if (mode === "raw") img.src = img.getAttribute("data-raw");
       else if (mode === "mask") img.src = img.getAttribute("data-mask");
       else if (mode === "annot") img.src = img.getAttribute("data-annot");
+      else if (mode === "watershed") img.src = img.getAttribute("data-watershed");
       else if (mode === "xai") img.src = img.getAttribute("data-xai");
     };
   });
@@ -462,26 +468,34 @@ function updateTabDisplay(tabKey) {
   const captionTitle = document.getElementById("tabCaptionTitle");
   const captionDesc = document.getElementById("tabCaptionDesc");
 
+  const regionCount = forecast.region_count ?? forecast.cell_count ?? "N/A";
+  const targetConf = forecast.target_confluence ?? forecast.evaluation?.target_confluence ?? "N/A";
+  const iouScore = forecast.iou_score ?? forecast.evaluation?.iou_score ?? "N/A";
+  const isGT = forecast.evaluation?.is_evaluated_on_ground_truth === true;
+
   if (tabKey === "target_raw") {
-    displayImg.src = forecast.target_raw_b64;
-    captionTitle.textContent = "🔬 Authentic Phase-Contrast Micrograph (Target Frame T5, 16h)";
-    captionDesc.textContent = `Actual Confluence: ${forecast.target_confluence ?? forecast.confluence}% | Untouched Full-Resolution Microscopy`;
+    displayImg.src = forecast.target_raw_b64 || appState.pipelineResult.input_frames[3]?.raw_b64;
+    captionTitle.textContent = "🔬 Authentic Phase-Contrast Micrograph (Target Frame T5)";
+    captionDesc.textContent = `Actual Confluence: ${targetConf}% | Untouched Full-Resolution Phase-Contrast Microscopy`;
   } else if (tabKey === "pred_mask") {
     displayImg.src = forecast.pred_mask_b64;
     captionTitle.textContent = "🎯 200-Epoch GAN Model Output Mask (T5)";
-    captionDesc.textContent = `Forecasted Confluence: ${forecast.confluence}% | Detected Cell Bodies: ${forecast.cell_count}`;
+    captionDesc.textContent = `Forecasted Confluence: ${forecast.confluence}% | Detected Cell Regions: ${regionCount}`;
   } else if (tabKey === "target_mask") {
     displayImg.src = forecast.target_mask_b64 || forecast.pred_mask_b64;
-    captionTitle.textContent = "🔳 LIVECell Ground Truth Binary Mask (T5)";
-    captionDesc.textContent = `Benchmark Confluence: ${forecast.target_confluence ?? 'N/A'}%`;
+    captionTitle.textContent = isGT ? "🔳 LIVECell Ground Truth Binary Mask (T5)" : "🔳 Algorithm-Generated Reference Mask (Otsu on Actual T5 Frame)";
+    captionDesc.textContent = isGT ? `Ground-Truth Benchmark Confluence: ${targetConf}%` : `Automated Otsu Reference Confluence: ${targetConf}% (No Manual Ground Truth in B10_1)`;
   } else if (tabKey === "overlay") {
     displayImg.src = forecast.overlay_comparison_b64 || forecast.pred_mask_b64;
-    captionTitle.textContent = `🧬 GAN vs Ground Truth Direct Overlap (IoU Fidelity: ${forecast.iou_score ?? 'N/A'})`;
-    captionDesc.textContent = "Yellow = True Positive Agreement | Cyan = GAN Prediction Only | Hot Pink = Ground Truth Only";
+    captionTitle.textContent = isGT
+captionTitle.textContent = isGT
+  ? `🧬 GAN vs Ground Truth Direct Overlap (IoU Agreement: ${iouScore})`
+  :
+    captionDesc.textContent = "Yellow = Spatial Overlap Agreement | Cyan = GAN Prediction Only | Hot Pink = Reference Only";
   } else if (tabKey === "pred_annot") {
     displayImg.src = forecast.pred_annot_b64;
-    captionTitle.textContent = "🔍 Cell Boundary Contours Overlaid on Original Micrograph";
-    captionDesc.textContent = `Detected ${forecast.cell_count} distinct cellular bodies with area > 40 px²`;
+    captionTitle.textContent = "🔍 Cell Boundary Contours Overlaid on Micrograph";
+    captionDesc.textContent = `Detected ${regionCount} distinct cellular regions | Area filtered > 40 px²`;
   }
 }
 

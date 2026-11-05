@@ -471,6 +471,48 @@ def track_regions_across_frames(
 # 5. RECONCILED MODEL PREDICTION & RECONSTRUCTION
 # ==========================================
 
+def predict_future_mask_legacy_fixed_threshold(
+    model: Any,
+    masks_4: List[np.ndarray],
+    target_shape: Tuple[int, int]
+) -> Tuple[np.ndarray, str]:
+    """
+    [LEGACY BACKUP] Original implementation using a hardcoded threshold of 127.
+    NOTE: Because the trained ConvLSTM generator outputs background activations around ~0.508
+    (which maps to ~130 in uint8), this fixed threshold of 127 causes all-foreground (100% 255) masks.
+    Preserved for comparison and regression verification.
+    """
+    H_target, W_target = target_shape[:2]
+    resized = [cv2.resize(m, (128, 128), interpolation=cv2.INTER_NEAREST).astype(np.float32) / 255.0 for m in masks_4[:4]]
+    seq = np.stack(resized, axis=0)
+    pred_128 = None
+    engine_info = "Heuristic Extrapolation (Model Not Active)"
+    if model is not None:
+        try:
+            inp = np.expand_dims(seq, axis=(0, -1))
+            raw_pred = model.predict(inp, verbose=0)
+            raw_pred = np.clip(raw_pred, 0, 1)
+            squeezed = np.squeeze(raw_pred)
+            if len(squeezed.shape) == 3:
+                squeezed = squeezed[:, :, 0]
+            pred_128 = (squeezed * 255.0).astype(np.uint8)
+            engine_info = "Trained ConvLSTM GAN (200 Epochs, Keras / TensorFlow) [Legacy Fixed 127]"
+        except Exception:
+            pred_128 = None
+    if pred_128 is None:
+        m3, m4 = resized[2], resized[3]
+        growth_vel = m4 - m3
+        extrap = np.clip(m4 + (1.10 * growth_vel), 0.0, 1.0)
+        pred_128 = (extrap * 255.0).astype(np.uint8)
+        engine_info = "Velocity Extrapolation Fallback"
+
+    pred_full = cv2.resize(pred_128, (W_target, H_target), interpolation=cv2.INTER_LINEAR)
+    _, cell_mask = cv2.threshold(pred_full, 127, 255, cv2.THRESH_BINARY)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    cell_mask = cv2.morphologyEx(cell_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    return cell_mask, engine_info
+
+
 def predict_future_mask(
     model: Any,
     masks_4: List[np.ndarray],
@@ -479,9 +521,12 @@ def predict_future_mask(
     """
     Feeds 4 binary segmentation masks into the 200-epoch ConvLSTM GAN generator.
     The model was specifically trained on sequences of 4 masks of shape (4, 128, 128, 1).
-    
+
+    Uses adaptive Otsu thresholding calculated strictly from the predicted probability map
+    (never using future ground-truth target data) to cleanly separate cellular foreground from background.
+
     Returns:
-    - predicted_mask: (H, W) uint8 binary mask resized to original target dimensions.
+    - predicted_mask: (H, W) uint8 binary mask with values strictly 0 and 255.
     - engine_info: String identifying whether native trained weights or fallback was used.
     """
     H_target, W_target = target_shape[:2]
@@ -507,7 +552,7 @@ def predict_future_mask(
                 squeezed = squeezed[:, :, 0]
             pred_128 = (squeezed * 255.0).astype(np.uint8)
             engine_info = "Trained ConvLSTM GAN (200 Epochs, Keras / TensorFlow)"
-        except Exception as e:
+        except Exception:
             # Fallback if model forward pass throws
             pred_128 = None
 
@@ -520,11 +565,24 @@ def predict_future_mask(
         pred_128 = (extrap * 255.0).astype(np.uint8)
         engine_info = "Velocity Extrapolation Fallback (TensorFlow not loaded or execution error)"
 
-    # Upscale to target resolution and threshold
-    pred_full = cv2.resize(pred_128, (W_target, H_target), interpolation=cv2.INTER_LINEAR)
-    _, cell_mask = cv2.threshold(pred_full, 127, 255, cv2.THRESH_BINARY)
+    # 2. Upscale continuous probability map to target resolution
+    prob_full = cv2.resize(pred_128, (W_target, H_target), interpolation=cv2.INTER_LINEAR)
+
+    # 3. Adaptive Otsu Thresholding strictly on the predicted probability map:
+    # Solves the all-foreground issue where background activations (~0.508) exceed fixed 127 (0.498).
+    # If the distribution is degenerate (uniform), fallback to median.
+    th_val, cell_mask = cv2.threshold(prob_full, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    if th_val == 0 or np.all(cell_mask == 0) or np.all(cell_mask == 255):
+        # Fallback to mid-range dynamic threshold
+        mid_th = int((int(prob_full.min()) + int(prob_full.max())) / 2)
+        _, cell_mask = cv2.threshold(prob_full, max(mid_th, 127), 255, cv2.THRESH_BINARY)
+
+    # 4. Clean morphological noise
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     cell_mask = cv2.morphologyEx(cell_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+
+    # Ensure strictly binary uint8 {0, 255}
+    cell_mask = ((cell_mask > 127) * 255).astype(np.uint8)
 
     return cell_mask, engine_info
 

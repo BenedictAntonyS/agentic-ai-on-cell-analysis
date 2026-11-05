@@ -126,8 +126,9 @@
               <div class="frame-view-toggle" id="frameSubBtns_0">
                 <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
                 <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
-                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
-                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+                <button class="view-subbtn" data-mode="annot" title="Otsu cell contours overlay">Otsu</button>
+                <button class="view-subbtn" data-mode="watershed" title="Distance-transform watershed partition">Watershed</button>
+                <button class="view-subbtn" data-mode="xai" title="Computed gradient saliency heatmap">Saliency</button>
               </div>
             </div>
             <div class="frame-media-wrap">
@@ -146,8 +147,9 @@
               <div class="frame-view-toggle" id="frameSubBtns_1">
                 <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
                 <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
-                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
-                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+                <button class="view-subbtn" data-mode="annot" title="Otsu cell contours overlay">Otsu</button>
+                <button class="view-subbtn" data-mode="watershed" title="Distance-transform watershed partition">Watershed</button>
+                <button class="view-subbtn" data-mode="xai" title="Computed gradient saliency heatmap">Saliency</button>
               </div>
             </div>
             <div class="frame-media-wrap">
@@ -166,8 +168,9 @@
               <div class="frame-view-toggle" id="frameSubBtns_2">
                 <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
                 <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
-                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
-                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+                <button class="view-subbtn" data-mode="annot" title="Otsu cell contours overlay">Otsu</button>
+                <button class="view-subbtn" data-mode="watershed" title="Distance-transform watershed partition">Watershed</button>
+                <button class="view-subbtn" data-mode="xai" title="Computed gradient saliency heatmap">Saliency</button>
               </div>
             </div>
             <div class="frame-media-wrap">
@@ -186,8 +189,9 @@
               <div class="frame-view-toggle" id="frameSubBtns_3">
                 <button class="view-subbtn active" data-mode="raw" title="Original untouched micrograph">Original</button>
                 <button class="view-subbtn" data-mode="mask" title="Binary segmentation mask">Mask</button>
-                <button class="view-subbtn" data-mode="annot" title="Cell contours overlay">Contours</button>
-                <button class="view-subbtn" data-mode="xai" title="Occlusion sensitivity heatmap">XAI Heatmap</button>
+                <button class="view-subbtn" data-mode="annot" title="Otsu cell contours overlay">Otsu</button>
+                <button class="view-subbtn" data-mode="watershed" title="Distance-transform watershed partition">Watershed</button>
+                <button class="view-subbtn" data-mode="xai" title="Computed gradient saliency heatmap">Saliency</button>
               </div>
             </div>
             <div class="frame-media-wrap">
@@ -323,9 +327,9 @@
           <div class="panel-title-wrap">
             <div class="panel-icon">🔥</div>
             <div>
-              <h2 class="panel-title" id="section-xai-title">3. Explainable AI (XAI) — Spatiotemporal Occlusion Sensitivity</h2>
+              <h2 class="panel-title" id="section-xai-title">3. Explainable AI (XAI) — Saliency Gradient Maps &amp; [Illustrative Reference Profile] Occlusion Sensitivity</h2>
               <div class="panel-desc">
-                Sliding window patch (16×16 px, step 8 px) calculating exact MAE degradation per frame under localized occlusion. Visualized with JET colormap (<code style="color: #67e8f9;">cmap='jet'</code>).
+                Spatial gradient saliency heatmaps are dynamically computed per frame using morphological Sobel filters (<code style="color: #67e8f9;">cmap='jet'</code>). Frame percentage weights (e.g. 35.8%) represent an <strong>[Illustrative Reference Profile]</strong> from the offline training ablation study.
               </div>
             </div>
           </div>

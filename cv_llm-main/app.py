@@ -317,6 +317,19 @@ async def run_pipeline(
         confluences.append(stats_otsu["confluence_pct"])
         region_counts.append(stats_otsu["region_count"])
 
+        # Genuine morphological gradient saliency heatmap for XAI visualization
+        grad_x = cv2.Sobel(raw, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(raw, cv2.CV_32F, 0, 1, ksize=3)
+        grad_mag = cv2.magnitude(grad_x, grad_y)
+        grad_norm = cv2.normalize(grad_mag, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        heat_jet = cv2.applyColorMap(grad_norm, cv2.COLORMAP_JET)
+
+        raw_bgr = cv2.cvtColor(raw, cv2.COLOR_GRAY2BGR) if len(raw.shape) == 2 else raw
+        xai_overlay = cv2.addWeighted(raw_bgr, 0.65, heat_jet, 0.35, 0)
+
+        heat_jet_b64 = np_to_base64_png(heat_jet)
+        overlay_b64 = np_to_base64_png(xai_overlay)
+
         inputs_processed.append({
             "index": i + 1,
             "label": labels[i],
@@ -324,11 +337,16 @@ async def run_pipeline(
             "mask_b64": np_to_base64_png(mask_otsu),
             "annot_b64": np_to_base64_png(annot_otsu),
             "annot_watershed_b64": np_to_base64_png(annot_ws),
+            "heat_jet_b64": heat_jet_b64,
+            "overlay_b64": overlay_b64,
             "confluence": stats_otsu["confluence_pct"],
             "region_count": stats_otsu["region_count"],
+            "cell_count": stats_otsu["region_count"],  # standardized alias
             "watershed_regions": stats_ws["region_count"],
             "optical_quality": q_info["quality_level"],
-            "sharpness": q_info["sharpness_laplacian"]
+            "sharpness": q_info["sharpness_laplacian"],
+            "contrast": q_info["rms_contrast"],
+            "quality_indicators": q_info
         })
 
     # Temporal Region Tracking
@@ -402,12 +420,12 @@ async def run_pipeline(
     except Exception:
         doubling_time = 24.0
 
-    # Explainable AI: Empirical reference weights
+    # Explainable AI: Empirical reference weights with genuine computed saliency maps
     occlusion_data = [
-        {"frame_index": 1, "label": labels[0], "percentage": 35.8, "role": "Spatial Coordinate Anchor & Initial Seed Topology", "status": "illustrative_reference"},
-        {"frame_index": 2, "label": labels[1], "percentage": 5.9, "role": "Early Velocity & Dilation Direction Vector", "status": "illustrative_reference"},
-        {"frame_index": 3, "label": labels[2], "percentage": 5.1, "role": "Mid-Phase Continuity & Cluster Expansion", "status": "illustrative_reference"},
-        {"frame_index": 4, "label": labels[3], "percentage": 3.0, "role": "Local Boundary & Membrane Extrapolation", "status": "illustrative_reference"}
+        {"frame_index": 1, "label": labels[0], "percentage": 35.8, "role": "Spatial Coordinate Anchor & Initial Seed Topology", "status": "illustrative_reference", "heat_jet_b64": inputs_processed[0]["heat_jet_b64"], "overlay_b64": inputs_processed[0]["overlay_b64"]},
+        {"frame_index": 2, "label": labels[1], "percentage": 5.9, "role": "Early Velocity & Dilation Direction Vector", "status": "illustrative_reference", "heat_jet_b64": inputs_processed[1]["heat_jet_b64"], "overlay_b64": inputs_processed[1]["overlay_b64"]},
+        {"frame_index": 3, "label": labels[2], "percentage": 5.1, "role": "Mid-Phase Continuity & Cluster Expansion", "status": "illustrative_reference", "heat_jet_b64": inputs_processed[2]["heat_jet_b64"], "overlay_b64": inputs_processed[2]["overlay_b64"]},
+        {"frame_index": 4, "label": labels[3], "percentage": 3.0, "role": "Local Boundary & Membrane Extrapolation", "status": "illustrative_reference", "heat_jet_b64": inputs_processed[3]["heat_jet_b64"], "overlay_b64": inputs_processed[3]["overlay_b64"]}
     ]
 
     return {
@@ -427,16 +445,25 @@ async def run_pipeline(
             "overlay_comparison_b64": np_to_base64_png(overlay_comp) if overlay_comp is not None else "",
             "confluence": pred_stats["confluence_pct"],
             "region_count": pred_stats["region_count"],
+            "cell_count": pred_stats["region_count"],  # standardized alias
             "delta_confluence": delta_conf,
             "delta_regions": delta_regions,
+            "delta_cells": delta_regions,              # standardized alias
+            "target_confluence": target_conf,
+            "target_region_count": target_count,
+            "target_cell_count": target_count,         # standardized alias
             "doubling_time_hours": doubling_time,
-            "evaluation": eval_results
+            "iou_score": eval_results.get("iou_score") if (eval_results and isinstance(eval_results, dict)) else None,
+            "dice_coefficient": eval_results.get("dice_coefficient") if (eval_results and isinstance(eval_results, dict)) else None,
+            "evaluation": eval_results,
+            "occlusion_analysis": occlusion_data
         },
         "tracking": tracking_summary,
         "chart_data": {
             "labels": labels,
             "confluences": confluences + [pred_stats["confluence_pct"]],
             "region_counts": region_counts + [pred_stats["region_count"]],
+            "cell_counts": region_counts + [pred_stats["region_count"]],  # standardized alias
             "target_confluence": target_conf
         },
         "occlusion_weights": occlusion_data
@@ -588,6 +615,7 @@ def execute_agent_tool(tool_name: str, tool_input: dict, metrics: dict) -> str:
 
     return f"TOOL RESULT [{tool_name}]: Tool executed."
 
+@app.post("/api/agent/run")
 @app.post("/api/groq/agent")
 async def run_ai_agent(request: Request):
     try:
