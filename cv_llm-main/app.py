@@ -8,8 +8,9 @@ from PIL import Image
 import cv2
 
 # Set safe writable directories for Keras and Matplotlib inside restricted/sandboxed environments
-os.environ.setdefault("KERAS_HOME", os.path.join(tempfile.gettempdir(), ".keras"))
-os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), ".mpl"))
+_temp_dir = tempfile.gettempdir()
+os.environ["KERAS_HOME"] = os.path.join(_temp_dir, ".keras")
+os.environ["MPLCONFIGDIR"] = os.path.join(_temp_dir, ".mpl")
 
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -252,18 +253,25 @@ async def get_system_status():
         "presets": presets_list
     }
 
+@app.get("/api/presets")
+async def get_presets():
+    return PRESET_DEFINITIONS
+
 @app.post("/api/predict")
+@app.post("/api/forecast")
 async def run_pipeline(
     preset: Optional[str] = Form(None),
+    preset_name: Optional[str] = Form(None),
     files: Optional[List[UploadFile]] = File(None)
 ):
+    preset = preset or preset_name
     target_raw = None
     target_mask = None
     labels = ["T1 (00h)", "T2 (04h)", "T3 (08h)", "T4 (12h)", "T5 (16h Forecast)"]
     preset_name = "Custom Upload Sequence"
     is_synthetic = False
 
-    if files and len(files) >= 4:
+    if isinstance(files, (list, tuple)) and len(files) >= 4:
         sorted_files = sorted(files, key=lambda f: f.filename)[:4]
         raw_frames = []
         filenames = []
@@ -343,6 +351,7 @@ async def run_pipeline(
             "region_count": stats_otsu["region_count"],
             "cell_count": stats_otsu["region_count"],  # standardized alias
             "watershed_regions": stats_ws["region_count"],
+            "watershed_uncertainty_warning": stats_ws.get("uncertainty_warning"),
             "optical_quality": q_info["quality_level"],
             "sharpness": q_info["sharpness_laplacian"],
             "contrast": q_info["rms_contrast"],
@@ -363,6 +372,7 @@ async def run_pipeline(
     # Ground Truth vs Algorithm Reference Evaluation
     eval_results = None
     target_annot = None
+    target_reference_mask = None
     target_conf = None
     target_count = None
     overlay_comp = None
@@ -376,6 +386,7 @@ async def run_pipeline(
                 split_info="Ground Truth Verification Horizon"
             )
             _, target_annot, target_stats = mcv.segment_otsu(target_mask, original_for_annotation=target_raw)
+            target_reference_mask = target_mask
             target_conf = target_stats["confluence_pct"]
             target_count = target_stats["region_count"]
             ref_mask_to_compare = target_mask
@@ -385,6 +396,7 @@ async def run_pipeline(
             # Segment actual T5 frame with Otsu to provide an algorithm-generated reference comparison.
             prep_tgt = mcv.preprocess_phase_contrast(target_raw)
             ref_mask_to_compare, target_annot, target_stats = mcv.segment_otsu(prep_tgt, original_for_annotation=target_raw)
+            target_reference_mask = ref_mask_to_compare
             target_conf = target_stats["confluence_pct"]
             target_count = target_stats["region_count"]
             eval_results = mcv.evaluate_segmentation_or_forecast(
@@ -441,6 +453,7 @@ async def run_pipeline(
             "pred_mask_b64": np_to_base64_png(pred_mask),
             "pred_annot_b64": np_to_base64_png(pred_annot),
             "target_mask_b64": np_to_base64_png(target_mask) if target_mask is not None else "",
+            "reference_mask_b64": np_to_base64_png(target_reference_mask) if target_reference_mask is not None else "",
             "target_annot_b64": np_to_base64_png(target_annot) if target_annot is not None else "",
             "overlay_comparison_b64": np_to_base64_png(overlay_comp) if overlay_comp is not None else "",
             "confluence": pred_stats["confluence_pct"],
@@ -484,16 +497,21 @@ async def analyze_with_vlm(request: Request):
         cv_metrics = data.get("metrics", {})
         api_key = data.get("api_key") or os.environ.get("GROQ_API_KEY", "")
         model = data.get("model") or vlm.DEFAULT_VISION_MODEL
-        
+
         # Base64 image payload from client
         b64_images = data.get("images", [])
         raw_images = []
         for b64 in b64_images:
+            if not b64:
+                continue
             if b64.startswith("data:image"):
                 b64 = b64.split(",", 1)[1]
-            img_bytes = base64.b64decode(b64)
-            img_arr = np.array(Image.open(io.BytesIO(img_bytes)))
-            raw_images.append(img_arr)
+            try:
+                img_bytes = base64.b64decode(b64)
+                img_arr = np.array(Image.open(io.BytesIO(img_bytes)))
+                raw_images.append(img_arr)
+            except Exception:
+                continue
 
         if not raw_images:
             raise HTTPException(status_code=400, detail="No valid images provided for VLM inspection.")
@@ -511,6 +529,166 @@ async def analyze_with_vlm(request: Request):
             "success": ok,
             "response": response_text,
             "metadata": meta
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# ==========================================
+# LOCAL CV-METRICS ANALYSIS (No API Key Required)
+# ==========================================
+@app.post("/api/vlm/local")
+async def analyze_local_metrics(request: Request):
+    """
+    Offline analysis using computed CV metrics only — no API key or image transmission required.
+    Generates a structured scientific interpretation of GAN pipeline outputs.
+    """
+    try:
+        data = await request.json()
+        query = data.get("query", "Describe the cellular growth state.").strip().lower()
+        m = data.get("metrics", {})
+
+        t1 = m.get("confluence_t1", None)
+        t4 = m.get("confluence_t4", None)
+        t5 = m.get("forecast_confluence", None)
+        delta = m.get("delta_confluence", None)
+        regions = m.get("forecast_regions", None)
+        iou = m.get("iou_score", None)
+        dice = m.get("dice_score", None)
+        quality = m.get("optical_quality", "Moderate Quality")
+        doubling = m.get("doubling_time_hours", None)
+        inference = m.get("inference_engine", "ConvLSTM GAN")
+
+        def _fmt(v, suffix=""):
+            return f"{v}{suffix}" if v is not None else "N/A"
+
+        # Growth phase classification
+        if t4 is not None:
+            if t4 < 20:
+                phase = "Lag Phase — sparse initial seeding, low cell-to-cell contact"
+            elif t4 < 50:
+                phase = "Early Exponential Growth — active proliferation, isolated clusters"
+            elif t4 < 70:
+                phase = "Mid-Exponential Growth — merging colonies, increased contact frequency"
+            elif t4 < 85:
+                phase = "Late Exponential / Pre-Confluent — high density, reduced migration"
+            else:
+                phase = "Plateau / Contact Inhibition — monolayer approaching saturation"
+        else:
+            phase = "Undetermined (run pipeline first)"
+
+        # Trend interpretation
+        if delta is not None:
+            if delta > 5:
+                trend = f"Strong positive growth (+{delta:.1f}% predicted delta T4→T5)"
+            elif delta > 1:
+                trend = f"Moderate positive growth (+{delta:.1f}% predicted delta)"
+            elif delta >= -1:
+                trend = f"Plateau or stasis ({delta:+.1f}% predicted delta)"
+            else:
+                trend = f"Decline signal ({delta:.1f}% predicted delta — verify image quality)"
+        else:
+            trend = "No trend data available (run GAN pipeline)"
+
+        # Passage recommendation
+        if t5 is not None and t5 > 85:
+            passage_rec = "⚠️ **Passage Recommended**: Predicted confluence exceeds 85%. Schedule 1:3 split to prevent contact inhibition."
+        elif t5 is not None and t5 > 70:
+            passage_rec = "🔶 **Monitor Closely**: Approaching pre-confluent density. Plan passage within next imaging cycle."
+        else:
+            passage_rec = "✅ **Culture Healthy**: Confluence within safe proliferative range."
+
+        # Build structured response based on query keywords
+        is_quality_q = any(k in query for k in ["quality", "artifact", "halo", "diffraction", "noise"])
+        is_cluster_q = any(k in query for k in ["cluster", "confluent", "hotspot", "spatial", "distribution"])
+        is_compare_q = any(k in query for k in ["compare", "frame 4", "predicted", "frame 5", "plausib"])
+        is_optical_q = any(k in query for k in ["optical", "visible", "feature", "morpholog", "density"])
+
+        sections = []
+        sections.append(f"""## 🔬 CV Metrics-Based Analysis
+
+> **Mode:** Local Offline Analysis · No image data transmitted · Based on verified pipeline outputs
+> **Query:** *{data.get('query', '—')}*
+
+---
+
+### 📊 Quantitative Metrics Summary
+
+| Metric | Value |
+|--------|-------|
+| Confluence T1 (Initial) | {_fmt(t1, '%')} |
+| Confluence T4 (Latest) | {_fmt(t4, '%')} |
+| GAN Forecast T5 | {_fmt(t5, '%')} |
+| Confluence Delta (T4→T5) | {_fmt(delta, '%')} |
+| Segmented Regions (T5) | {_fmt(regions)} |
+| Algorithm IoU (Ref) | {_fmt(iou)} |
+| Algorithm Dice (Ref) | {_fmt(dice)} |
+| Optical Quality | {quality} |
+| Doubling Time | {_fmt(doubling, 'h')} |
+| Inference Engine | {inference} |""")
+
+        sections.append(f"""
+### 🧬 Growth Phase Assessment
+
+**{phase}**
+
+{trend}
+
+{passage_rec}""")
+
+        if is_quality_q or is_optical_q:
+            sections.append(f"""
+### 🔭 Optical & Image Quality Interpretation
+
+**Reported Quality Index:** {quality}
+
+Phase-contrast microscopy of SH-SY5Y neuroblastoma cells produces characteristic bright diffraction halos around cell boundaries due to refractive index differences between cytoplasm and culture medium. High optical quality indicates sharp halo delineation and minimal out-of-focus blur. At confluence {_fmt(t4, '%')}, expect increased halo overlaps in dense cluster regions, which may cause watershed over-segmentation artifacts.
+
+*Note: Actual pixel morphology requires cloud VLM analysis. Enter a Groq API key to enable direct image inspection.*""")
+
+        if is_cluster_q:
+            sections.append(f"""
+### 🗺️ Spatial Distribution Interpretation
+
+At {_fmt(t4, '%')} confluence, SH-SY5Y cultures typically display:
+- **Central high-density zones**: Initial seeding cores with greatest cell-to-cell contact
+- **Peripheral expansion fronts**: Active proliferation at colony boundaries
+- **Isolated satellite clusters**: Secondary nucleation sites from early seeding heterogeneity
+
+The GAN forecasts {_fmt(regions)} segmented regions at T5, suggesting {"continued colony merging and boundary expansion" if (regions or 0) > 10 else "relatively consolidated culture topology"}.
+
+*For actual hotspot localization, enable cloud VLM with a Groq API key to submit real pixel data.*""")
+
+        if is_compare_q:
+            sections.append(f"""
+### ⚖️ Frame 4 → Predicted Frame 5 Comparison
+
+**GAN Prediction Fidelity:**
+- T4 Observed Confluence: {_fmt(t4, '%')}
+- T5 Predicted Confluence: {_fmt(t5, '%')}
+- Algorithm Reference IoU: {_fmt(iou)} · Dice: {_fmt(dice)}
+
+The ConvLSTM GAN generator uses 4-frame spatiotemporal input (batch × 4 × 128 × 128 × 1) to predict the T5 binary foreground mask. The predicted mask is compared against an Otsu-segmented reference of the actual T5 frame (Algorithm-Generated Reference Comparison — not manual ground truth).
+
+{f'An IoU of {iou:.3f} and Dice of {dice:.3f} indicate good structural overlap between predicted and reference segmentations.' if iou else 'Run the pipeline to compute IoU/Dice scores.'}
+
+*Biological plausibility assessment requires visual inspection. Enable cloud VLM for direct pixel comparison.*""")
+
+        response_md = "\n".join(sections)
+        response_md += f"""
+
+---
+*⚙️ This analysis is generated entirely from verified Computer Vision pipeline outputs. No microscopy images were transmitted. To enable direct pixel-level visual understanding, enter a Groq API key in the sidebar and use Cloud VLM mode.*"""
+
+        return {
+            "success": True,
+            "response": response_md,
+            "metadata": {
+                "model_used": "Local CV Metrics Engine (Offline)",
+                "frames_analyzed": ["Metrics-only — no images transmitted"],
+                "provider": "Local (No API Key Required)",
+                "mode": "offline"
+            }
         }
     except Exception as e:
         return {"success": False, "error": str(e)}

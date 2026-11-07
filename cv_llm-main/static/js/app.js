@@ -215,8 +215,10 @@ function setLoadingState(isLoading) {
 // RENDER PIPELINE RESULTS
 // ==========================================
 function renderPipelineResults(result) {
-  const inputs = result.input_frames;
-  const forecast = result.forecast;
+  const inputs = result.input_frames || [];
+  const forecast = result.forecast || {};
+  const isGroundTruth = forecast.evaluation?.is_evaluated_on_ground_truth === true;
+  const referenceLabel = isGroundTruth ? "Ground Truth" : "Algorithm-Generated Reference";
 
   if (result.preset_name) {
     const lbl = document.getElementById("activeSeqLabel");
@@ -239,17 +241,17 @@ function renderPipelineResults(result) {
       imgEl.setAttribute("data-watershed", frame.annot_watershed_b64 || frame.annot_b64);
       imgEl.setAttribute("data-xai", frame.heat_jet_b64 || "");
 
-      tagEl.textContent = `T${i + 1}`;
-      timeEl.textContent = `${i * 4}h Time-Lapse`;
+      if (tagEl) tagEl.textContent = `T${i + 1}`;
+      if (timeEl) timeEl.textContent = frame.label || `${i * 4}h Time-Lapse`;
       const regCount = frame.region_count !== undefined ? frame.region_count : frame.cell_count;
       const qLevel = frame.optical_quality ? ` | ${frame.optical_quality}` : "";
-      metricEl.textContent = `${frame.confluence}% Conf | ${regCount} regions${qLevel}`;
+      if (metricEl) metricEl.textContent = `${frame.confluence ?? "N/A"}% Conf | ${regCount ?? "N/A"} regions${qLevel}`;
 
       setupFrameSubButtons(i);
     }
   }
 
-  // 2. Render Explainable AI (XAI) Spatiotemporal Saliency Maps & Reference Weights
+  // 2. Render image-gradient maps and clearly illustrative reference weights
   const occData = forecast.occlusion_analysis || result.occlusion_weights || [];
   for (let i = 0; i < 4; i++) {
     // Row 1: Original Micrographs
@@ -273,8 +275,8 @@ function renderPipelineResults(result) {
     }
     if (badgeEl && occItem) {
       const pct = occItem.percentage !== undefined ? occItem.percentage : occItem.occlusion_pct;
-      badgeEl.textContent = `${pct}% [Illustrative Profile]`;
-      badgeEl.title = "Ablation sensitivity weight derived from offline training benchmark (Illustrative Reference Profile)";
+      badgeEl.textContent = pct === undefined ? "Illustrative" : `${pct}% · Illustrative`;
+      badgeEl.title = "Illustrative reference weights; these values are not computed from this forecast.";
     }
   }
 
@@ -286,40 +288,52 @@ function renderPipelineResults(result) {
   const iouEl = document.getElementById("metricIoU");
   const doublingEl = document.getElementById("metricDoublingTime");
 
-  confEl.textContent = `${forecast.confluence}%`;
+  if (confEl) confEl.textContent = `${forecast.confluence ?? "N/A"}%`;
   
   if (forecast.target_confluence !== null && forecast.target_confluence !== undefined) {
     targetConfEl.textContent = `${forecast.target_confluence}%`;
   } else if (forecast.evaluation?.target_confluence !== undefined) {
     targetConfEl.textContent = `${forecast.evaluation.target_confluence}%`;
   } else {
-    targetConfEl.textContent = "Algorithm Ref";
+    targetConfEl.textContent = "N/A";
   }
 
   const dSign = (forecast.delta_confluence || 0) >= 0 ? "+" : "";
-  deltaEl.textContent = `${dSign}${forecast.delta_confluence ?? 0}%`;
-  if ((forecast.delta_confluence || 0) >= 0) {
+  if (deltaEl) deltaEl.textContent = forecast.delta_confluence == null ? "N/A" : `${dSign}${forecast.delta_confluence}%`;
+  if (deltaTrend && forecast.delta_confluence != null && forecast.delta_confluence >= 0) {
     deltaTrend.className = "metric-trend positive";
     deltaTrend.innerHTML = `▲ Dynamic Increase`;
-  } else {
+  } else if (deltaTrend && forecast.delta_confluence != null) {
     deltaTrend.className = "metric-trend negative";
     deltaTrend.innerHTML = `▼ Proliferation Deceleration`;
   }
 
   const resolvedIoU = forecast.iou_score ?? forecast.evaluation?.iou_score;
-  if (resolvedIoU !== null && resolvedIoU !== undefined) {
+  if (iouEl && resolvedIoU !== null && resolvedIoU !== undefined) {
     iouEl.textContent = `${resolvedIoU}`;
-  } else {
+  } else if (iouEl) {
     iouEl.textContent = "N/A";
   }
 
-  doublingEl.textContent = `~${forecast.doubling_time_hours ?? 24.0} hrs`;
+  if (doublingEl) doublingEl.textContent = forecast.doubling_time_hours == null ? "N/A" : `~${forecast.doubling_time_hours} hrs`;
 
   // 4. Update Before/After Slider: Frame T4 vs Real Target T5
   const sliderBefore = document.getElementById("sliderBeforeImg");
   const sliderAfter = document.getElementById("sliderAfterImg");
-  sliderBefore.src = inputs[3].raw_b64;
-  sliderAfter.src = forecast.target_raw_b64 || inputs[3].raw_b64;
+  if (sliderBefore && inputs[3]?.raw_b64) sliderBefore.src = inputs[3].raw_b64;
+  if (sliderAfter) sliderAfter.src = forecast.target_raw_b64 || forecast.synth_micrograph_b64 || inputs[3]?.raw_b64 || "";
+  document.querySelectorAll(".comparator-title").forEach(el => {
+    el.textContent = `Original Horizon Slider: Frame T4 vs Frame T5 ${referenceLabel}`;
+  });
+  document.querySelectorAll(".comparator-labels span:last-child").forEach(el => {
+    el.textContent = forecast.target_raw_b64
+      ? `Frame T5 (${referenceLabel}) ►`
+      : "Synthesized forecast view ►";
+  });
+  const targetTab = document.querySelector('[data-tab="target_mask"]');
+  const overlayTab = document.querySelector('[data-tab="overlay"]');
+  if (targetTab) targetTab.textContent = isGroundTruth ? "🔳 Ground Truth Mask" : "🔳 Algorithm Reference Mask";
+  if (overlayTab) overlayTab.textContent = isGroundTruth ? "🧬 GAN vs Ground Truth" : "🧬 GAN vs Algorithm Reference";
 
   // 5. Update Multi-View Tab Content
   updateTabDisplay(appState.activeTab);
@@ -327,24 +341,29 @@ function renderPipelineResults(result) {
   // 6. Update Kinetic Proliferation Chart
   if (appState.chartInstance && result.chart_data) {
     const chartCounts = result.chart_data.cell_counts || result.chart_data.region_counts || [];
+    const chartLabels = [...(result.chart_data.labels || [])];
+    if (chartLabels.length) chartLabels[chartLabels.length - 1] += " · Forecast";
     appState.chartInstance.updateData(
-      result.chart_data.labels,
+      chartLabels,
       result.chart_data.confluences,
       chartCounts
     );
   }
 
-  // 7. Reset report area
-  document.getElementById("reportContent").innerHTML = `
-    <div style="text-align: center; padding: 2rem; color: #94a3b8;">
-      <p style="font-size: 1.1rem; margin-bottom: 0.5rem; color: #fff;">📊 New Forecasting Horizon Ready</p>
-      <p style="font-size: 0.85rem; margin-bottom: 1.2rem;">Click below to synthesize a comprehensive biological and kinetic growth evaluation by Dr. NeuroCell AI.</p>
-      <button class="nav-action-btn" id="btnGenReportQuick" style="background: rgba(0, 245, 255, 0.15); border-color: var(--cyan-primary); color: #fff; padding: 0.6rem 1.4rem;">
-        🧬 Formulate Clinical Growth Report
-      </button>
-    </div>
-  `;
-  document.getElementById("btnGenReportQuick")?.addEventListener("click", generateReport);
+  // 7. Reset report area if present
+  const reportContentEl = document.getElementById("reportContent");
+  if (reportContentEl) {
+    reportContentEl.innerHTML = `
+      <div style="text-align: center; padding: 2rem; color: #94a3b8;">
+        <p style="font-size: 1.1rem; margin-bottom: 0.5rem; color: #fff;">📊 New Forecasting Horizon Ready</p>
+        <p style="font-size: 0.85rem; margin-bottom: 1.2rem;">Click below to synthesize a comprehensive biological and kinetic growth evaluation by Dr. NeuroCell AI.</p>
+        <button class="nav-action-btn" id="btnGenReportQuick" style="background: rgba(0, 245, 255, 0.15); border-color: var(--cyan-primary); color: #fff; padding: 0.6rem 1.4rem;">
+          🧬 Formulate Clinical Growth Report
+        </button>
+      </div>
+    `;
+    document.getElementById("btnGenReportQuick")?.addEventListener("click", generateReport);
+  }
 }
 
 // View toggle on individual frame cards (Original / Mask / Contours / XAI Heatmap)
@@ -474,24 +493,24 @@ function updateTabDisplay(tabKey) {
   const isGT = forecast.evaluation?.is_evaluated_on_ground_truth === true;
 
   if (tabKey === "target_raw") {
-    displayImg.src = forecast.target_raw_b64 || appState.pipelineResult.input_frames[3]?.raw_b64;
-    captionTitle.textContent = "🔬 Authentic Phase-Contrast Micrograph (Target Frame T5)";
+    displayImg.src = forecast.target_raw_b64 || forecast.synth_micrograph_b64 || appState.pipelineResult.input_frames?.[3]?.raw_b64 || "";
+    captionTitle.textContent = forecast.target_raw_b64 ? "🔬 Authentic Phase-Contrast Micrograph (Target Frame T5)" : "🔬 No observed target frame; showing forecast visualization";
     captionDesc.textContent = `Actual Confluence: ${targetConf}% | Untouched Full-Resolution Phase-Contrast Microscopy`;
   } else if (tabKey === "pred_mask") {
     displayImg.src = forecast.pred_mask_b64;
-    captionTitle.textContent = "🎯 200-Epoch GAN Model Output Mask (T5)";
+    captionTitle.textContent = `🎯 ${appState.pipelineResult.inference_engine || "Forecast"} Output Mask (T5)`;
     captionDesc.textContent = `Forecasted Confluence: ${forecast.confluence}% | Detected Cell Regions: ${regionCount}`;
   } else if (tabKey === "target_mask") {
-    displayImg.src = forecast.target_mask_b64 || forecast.pred_mask_b64;
-    captionTitle.textContent = isGT ? "🔳 LIVECell Ground Truth Binary Mask (T5)" : "🔳 Algorithm-Generated Reference Mask (Otsu on Actual T5 Frame)";
-    captionDesc.textContent = isGT ? `Ground-Truth Benchmark Confluence: ${targetConf}%` : `Automated Otsu Reference Confluence: ${targetConf}% (No Manual Ground Truth in B10_1)`;
+    const referenceMask = forecast.target_mask_b64 || forecast.reference_mask_b64;
+    displayImg.src = referenceMask || "";
+    captionTitle.textContent = isGT ? "🔳 Independent Ground-Truth Mask (T5)" : "🔳 Algorithm-Generated Reference Mask (Otsu on Actual T5 Frame)";
+    captionDesc.textContent = referenceMask ? (isGT ? `Ground-Truth Confluence: ${targetConf}%` : `Automated Otsu Reference Confluence: ${targetConf}%; not manual ground truth.`) : "No observed target mask is available for this sequence.";
   } else if (tabKey === "overlay") {
-    displayImg.src = forecast.overlay_comparison_b64 || forecast.pred_mask_b64;
-    captionTitle.textContent = isGT
-captionTitle.textContent = isGT
-  ? `🧬 GAN vs Ground Truth Direct Overlap (IoU Agreement: ${iouScore})`
-  :
-    captionDesc.textContent = "Yellow = Spatial Overlap Agreement | Cyan = GAN Prediction Only | Hot Pink = Reference Only";
+    displayImg.src = forecast.overlay_comparison_b64 || "";
+    captionTitle.textContent = `🧬 GAN vs ${isGT ? "Ground Truth" : "Algorithm-Generated Reference"} (IoU Agreement: ${iouScore})`;
+    captionDesc.textContent = forecast.overlay_comparison_b64
+      ? "Yellow = Spatial overlap | Cyan = forecast only | Pink = reference only"
+      : "No observed target frame is available for a comparison overlay.";
   } else if (tabKey === "pred_annot") {
     displayImg.src = forecast.pred_annot_b64;
     captionTitle.textContent = "🔍 Cell Boundary Contours Overlaid on Micrograph";
@@ -502,7 +521,7 @@ captionTitle.textContent = isGT
 // ==========================================
 // GROQ CLINICAL REPORT GENERATION
 // ==========================================
-document.getElementById("btnGenerateReport").addEventListener("click", generateReport);
+document.getElementById("btnGenerateReport")?.addEventListener("click", generateReport);
 
 async function generateReport() {
   if (!appState.pipelineResult) {
@@ -571,6 +590,7 @@ document.getElementById("btnCopyReport")?.addEventListener("click", () => {
 function setupChatHandlers() {
   const input = document.getElementById("chatInput");
   const btnSend = document.getElementById("btnChatSend");
+  if (!input || !btnSend) return;
 
   btnSend.addEventListener("click", () => sendChatMessage());
   input.addEventListener("keydown", (e) => {
@@ -940,24 +960,102 @@ function setupVlmHandlers() {
   const frameSelect = document.getElementById("vlmFrameSelect");
   const modelSelect = document.getElementById("vlmModelSelect");
   const resultBox = document.getElementById("vlmResultContent");
+  const vlmModeToggle = document.getElementById("vlmModeToggle");
+  const vlmApiKeyStatus = document.getElementById("vlmApiKeyStatus");
 
+  // Preset chip click → fill query input
   document.querySelectorAll(".vlm-preset-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       if (queryInput) queryInput.value = btn.textContent.trim();
     });
   });
 
+  // Update API key status indicator
+  function refreshApiKeyStatus() {
+    const key = getStoredApiKey();
+    if (!vlmApiKeyStatus) return;
+    if (key) {
+      vlmApiKeyStatus.innerHTML = `<span style="color:#4ade80;">●</span> API Key Active — Cloud VLM enabled`;
+      vlmApiKeyStatus.style.color = "#4ade80";
+    } else {
+      vlmApiKeyStatus.innerHTML = `<span style="color:#f59e0b;">●</span> No API Key — Local Metrics Mode`;
+      vlmApiKeyStatus.style.color = "#f59e0b";
+    }
+  }
+  refreshApiKeyStatus();
+
+  // Refresh status when API key input changes
+  const apiKeyInput = document.getElementById("apiKeyInput");
+  if (apiKeyInput) {
+    apiKeyInput.addEventListener("input", () => {
+      setTimeout(refreshApiKeyStatus, 200);
+    });
+  }
+
+  // Mode toggle: "cloud" vs "local"
+  if (vlmModeToggle) {
+    vlmModeToggle.addEventListener("change", () => {
+      const isLocal = vlmModeToggle.value === "local";
+      if (frameSelect) frameSelect.disabled = isLocal;
+      if (modelSelect) modelSelect.disabled = isLocal;
+      if (frameSelect) frameSelect.style.opacity = isLocal ? "0.4" : "1";
+      if (modelSelect) modelSelect.style.opacity = isLocal ? "0.4" : "1";
+    });
+  }
+
   if (!btnRun) return;
 
   btnRun.addEventListener("click", async () => {
-    if (!appState.pipelineResult) {
-      showToast("Please load or run a sequence first.", "warning");
+    const query = queryInput?.value?.trim();
+    if (!query) {
+      showToast("Please enter a research question.", "warning");
       return;
     }
 
-    const query = queryInput.value.trim();
-    if (!query) {
-      showToast("Please enter a research question for the VLM.", "warning");
+    const apiKey = getStoredApiKey();
+    const modeVal = vlmModeToggle ? vlmModeToggle.value : (apiKey ? "cloud" : "local");
+    const useLocalMode = (modeVal === "local") || !apiKey;
+
+    // Local mode: does NOT require pipeline result
+    if (useLocalMode) {
+      btnRun.innerHTML = `<span class="spinner"></span> Analyzing Metrics...`;
+      btnRun.disabled = true;
+
+      const metrics = buildVlmMetrics();
+
+      try {
+        const res = await fetch("/api/vlm/local", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, metrics })
+        });
+        const data = await res.json();
+        renderVlmResult(data, resultBox, modelSelect, "Local Metrics Engine");
+        if (data.success) showToast("Local metrics analysis complete!", "success");
+      } catch (err) {
+        console.error(err);
+        resultBox.innerHTML = `<div style="color:#fca5a5;padding:1rem;">❌ Error running local analysis.</div>`;
+      } finally {
+        btnRun.innerHTML = `👁️ Analyze with VLM`;
+        btnRun.disabled = false;
+      }
+      return;
+    }
+
+    // Cloud mode: requires pipeline result for image frames
+    if (!appState.pipelineResult) {
+      showToast("Run the pipeline first to load microscopy images for cloud VLM.", "warning");
+      // Auto-fallback to local mode if no pipeline
+      if (resultBox) {
+        resultBox.innerHTML = `
+          <div style="background:rgba(245,158,11,0.1);border-left:3px solid #f59e0b;padding:1rem;border-radius:6px;">
+            <strong style="color:#f59e0b;">📋 No pipeline data loaded</strong><br>
+            <span style="color:#94a3b8;font-size:0.85rem;">
+              Run the pipeline in Section 1 first, or switch to <strong>Local Metrics Mode</strong> 
+              (no API key needed) to analyze from quantitative metrics only.
+            </span>
+          </div>`;
+      }
       return;
     }
 
@@ -965,7 +1063,7 @@ function setupVlmHandlers() {
     btnRun.disabled = true;
 
     try {
-      const choice = frameSelect.value;
+      const choice = frameSelect?.value || "current_and_forecast";
       const f = appState.pipelineResult.input_frames;
       const forecast = appState.pipelineResult.forecast;
 
@@ -973,66 +1071,109 @@ function setupVlmHandlers() {
       let labels = [];
 
       if (choice === "current_and_forecast") {
-        images = [f[3].raw_b64, forecast.synth_micrograph_b64];
+        images = [f?.[3]?.raw_b64, forecast?.synth_micrograph_b64].filter(Boolean);
         labels = ["Frame 4 (Current)", "Predicted Frame 5 (GAN Forecast)"];
       } else if (choice === "initial_and_current") {
-        images = [f[0].raw_b64, f[3].raw_b64];
+        images = [f?.[0]?.raw_b64, f?.[3]?.raw_b64].filter(Boolean);
         labels = ["Frame 1 (Initial)", "Frame 4 (Current)"];
       } else if (choice === "contours_overlay") {
-        images = [f[3].annot_b64, forecast.pred_annot_b64];
+        images = [f?.[3]?.annot_b64, forecast?.pred_annot_b64].filter(Boolean);
         labels = ["Frame 4 Contours", "Predicted Frame 5 Contours"];
       } else {
-        images = [f[3].raw_b64];
+        images = [f?.[3]?.raw_b64].filter(Boolean);
         labels = ["Frame 4 (Current)"];
       }
 
-      const apiKey = getStoredApiKey();
+      if (!images.length) {
+        showToast("No image data available for selected frames.", "warning");
+        btnRun.innerHTML = `👁️ Analyze with VLM`;
+        btnRun.disabled = false;
+        return;
+      }
 
       const res = await fetch("/api/vlm/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          query: query,
-          images: images,
-          labels: labels,
-          model: modelSelect.value,
+          query,
+          images,
+          labels,
+          model: modelSelect?.value,
           api_key: apiKey,
-          metrics: {
-            confluence_t1: f[0].confluence,
-            confluence_t4: f[3].confluence,
-            forecast_confluence: forecast.confluence,
-            delta_confluence: forecast.delta_confluence,
-            forecast_regions: forecast.region_count,
-            optical_quality: f[0].optical_quality || "Moderate Quality",
-            inference_engine: appState.pipelineResult.inference_engine
-          }
+          metrics: buildVlmMetrics()
         })
       });
 
       const data = await res.json();
-      if (data.success) {
-        resultBox.innerHTML = `
-          <div style="margin-bottom: 0.8rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.5rem;">
-            <span style="font-size: 0.85rem; color: var(--cyan-primary); font-weight: 600;">Model: ${data.metadata?.model_used || modelSelect.value}</span>
-            <span style="font-size: 0.75rem; color: #94a3b8;">Frames analyzed: ${data.metadata?.frames_analyzed ? data.metadata.frames_analyzed.join(", ") : "Transmitted"}</span>
-          </div>
-          <div style="line-height: 1.6; color: #e2e8f0;">${formatMarkdownToHtml(data.response)}</div>
-        `;
-        showToast("VLM image analysis completed!", "success");
-      } else {
-        resultBox.innerHTML = `<div style="color: #fca5a5; background: rgba(185, 28, 28, 0.2); padding: 1rem; border-radius: 6px; border-left: 3px solid #ef4444;">
-          <strong>VLM Analysis Notice:</strong><br>${data.error || data.response}
-        </div>`;
-        showToast("VLM notice", "warning");
-      }
+      renderVlmResult(data, resultBox, modelSelect, modelSelect?.value);
+      if (data.success) showToast("VLM image analysis completed!", "success");
+      else showToast("VLM returned a notice — see result panel.", "warning");
     } catch (err) {
       console.error(err);
-      resultBox.innerHTML = `<div style="color: #fca5a5; padding: 1rem;">❌ Error communicating with Vision API endpoint.</div>`;
+      resultBox.innerHTML = `<div style="color:#fca5a5;padding:1rem;">❌ Error communicating with Vision API.</div>`;
       showToast("Error querying Vision API", "error");
     } finally {
       btnRun.innerHTML = `👁️ Analyze with VLM`;
       btnRun.disabled = false;
     }
   });
+}
+
+// Build CV metrics object from current pipeline state (safe — returns empty {} if no pipeline yet)
+function buildVlmMetrics() {
+  const r = appState.pipelineResult;
+  if (!r) return {};
+  const f = r.input_frames || [];
+  const fc = r.forecast || {};
+  return {
+    confluence_t1: f[0]?.confluence ?? null,
+    confluence_t4: f[3]?.confluence ?? null,
+    forecast_confluence: fc.confluence ?? null,
+    delta_confluence: fc.delta_confluence ?? null,
+    forecast_regions: fc.region_count ?? null,
+    iou_score: fc.evaluation?.iou ?? null,
+    dice_score: fc.evaluation?.dice ?? null,
+    optical_quality: f[0]?.optical_quality || "Moderate Quality",
+    doubling_time_hours: r.doubling_time_hours ?? null,
+    inference_engine: r.inference_engine || "ConvLSTM GAN"
+  };
+}
+
+// Render VLM/local result into result box
+function renderVlmResult(data, resultBox, modelSelect, fallbackModel) {
+  if (!resultBox) return;
+  if (data.success) {
+    const modelUsed = data.metadata?.model_used || fallbackModel || "Analysis Engine";
+    const framesAnalyzed = data.metadata?.frames_analyzed
+      ? data.metadata.frames_analyzed.join(", ")
+      : "Metrics-based";
+    const isLocal = data.metadata?.mode === "offline";
+    resultBox.innerHTML = `
+      <div style="margin-bottom:0.8rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-subtle);padding-bottom:0.5rem;flex-wrap:wrap;gap:0.4rem;">
+        <span style="font-size:0.85rem;color:${isLocal ? '#f59e0b' : 'var(--cyan-primary)'};font-weight:600;">
+          ${isLocal ? '⚙️' : '👁️'} ${modelUsed}
+        </span>
+        <span style="font-size:0.75rem;color:#94a3b8;">${framesAnalyzed}</span>
+      </div>
+      <div style="line-height:1.6;color:#e2e8f0;">${formatMarkdownToHtml(data.response)}</div>
+    `;
+  } else {
+    // Show API key notice in a styled info box — not a scary red error
+    const msg = data.response || data.error || "Unknown error";
+    const isKeyError = msg.toLowerCase().includes("api key") || msg.toLowerCase().includes("missing");
+    resultBox.innerHTML = `
+      <div style="background:${isKeyError ? 'rgba(245,158,11,0.1)' : 'rgba(185,28,28,0.15)'};
+                  border-left:3px solid ${isKeyError ? '#f59e0b' : '#ef4444'};
+                  padding:1.2rem;border-radius:6px;">
+        <strong style="color:${isKeyError ? '#f59e0b' : '#fca5a5'};">
+          ${isKeyError ? '🔑 API Key Required for Cloud VLM' : '⚠️ VLM Notice'}
+        </strong><br><br>
+        <div style="color:#e2e8f0;line-height:1.6;">${formatMarkdownToHtml(msg)}</div>
+        ${isKeyError ? `<div style="margin-top:1rem;padding:0.8rem;background:rgba(0,245,255,0.07);border-radius:6px;font-size:0.82rem;color:#94a3b8;">
+          💡 <strong>To use cloud VLM:</strong> Enter your Groq API key in the top-right sidebar input.<br>
+          💡 <strong>No API key?</strong> Switch the Mode selector to <em>Local Metrics Mode</em> — it analyzes computed CV metrics with no image transmission and no key needed.
+        </div>` : ""}
+      </div>`;
+  }
 }
 

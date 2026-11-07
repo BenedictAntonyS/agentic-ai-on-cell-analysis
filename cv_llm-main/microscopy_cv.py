@@ -327,6 +327,15 @@ def segment_watershed(
     cell_pixels = int(np.count_nonzero(ws_mask))
     confluence_pct = round((cell_pixels / total_pixels) * 100.0, 2)
 
+    # High confluence uncertainty warning: Euclidean distance peaks coalesce in dense cultures
+    uncertainty_warning = None
+    if confluence_pct > 75.0:
+        uncertainty_warning = (
+            f"High Confluence Notice ({confluence_pct}%): Conjoined cellular clusters and touching diffraction "
+            "halos cause Euclidean distance-transform markers to coalesce into merged macro-regions. "
+            "Region counts in dense monolayer cultures represent cluster partitions rather than verified individual cells."
+        )
+
     stats = {
         "confluence_pct": confluence_pct,
         "segmented_area_px": cell_pixels,
@@ -334,6 +343,7 @@ def segment_watershed(
         "mean_region_area_px": round(float(np.mean(areas)), 1) if areas else 0.0,
         "median_region_area_px": round(float(np.median(areas)), 1) if areas else 0.0,
         "max_region_area_px": round(float(np.max(areas)), 1) if areas else 0.0,
+        "uncertainty_warning": uncertainty_warning,
         "method": "Distance-Transform Watershed Partitioning"
     }
 

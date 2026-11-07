@@ -8,9 +8,9 @@ class KineticGrowthChart {
     if (!this.canvas) return;
     this.ctx = this.canvas.getContext('2d');
     this.data = {
-      labels: ['T1 (0h)', 'T2 (4h)', 'T3 (8h)', 'T4 (12h)', 'T5 (Forecast)'],
-      confluences: [18.2, 22.4, 27.8, 33.5, 39.8],
-      cellCounts: [85, 96, 114, 132, 155]
+      labels: [],
+      confluences: [],
+      cellCounts: []
     };
     this.hoverIndex = -1;
     this.setupListeners();
@@ -77,6 +77,15 @@ class KineticGrowthChart {
 
     // Clear background
     ctx.clearRect(0, 0, w, h);
+
+    if (!this.data.labels.length || !this.data.confluences.length) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px "Inter", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Run a sequence to view measured confluence and forecast', w / 2, h / 2);
+      return;
+    }
 
     const padLeft = 60;
     const padRight = 40;
@@ -203,7 +212,7 @@ class KineticGrowthChart {
       const label = labels[idx];
 
       const tipText1 = `${label}: ${conf}% Confluence`;
-      const tipText2 = `Detected: ${cells} cell bodies`;
+      const tipText2 = `Segmented regions: ${cells}`;
 
       ctx.font = 'bold 11px "Inter", sans-serif';
       const tw = Math.max(ctx.measureText(tipText1).width, ctx.measureText(tipText2).width) + 24;

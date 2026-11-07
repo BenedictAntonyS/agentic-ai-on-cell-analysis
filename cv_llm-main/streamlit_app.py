@@ -1,4 +1,5 @@
 import os
+import sys
 import io
 import json
 import tempfile
@@ -7,9 +8,14 @@ from PIL import Image
 import cv2
 import streamlit as st
 
+_app_dir = os.path.dirname(os.path.abspath(__file__))
+if _app_dir not in sys.path:
+    sys.path.insert(0, _app_dir)
+
 # Ensure safe writable cache directories
-os.environ.setdefault("KERAS_HOME", os.path.join(tempfile.gettempdir(), ".keras"))
-os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), ".mpl"))
+_temp_dir = tempfile.gettempdir()
+os.environ["KERAS_HOME"] = os.path.join(_temp_dir, ".keras")
+os.environ["MPLCONFIGDIR"] = os.path.join(_temp_dir, ".mpl")
 
 # Import shared robust microscopy CV and VLM modules
 import microscopy_cv as mcv
@@ -26,12 +32,12 @@ st.set_page_config(
 )
 
 def safe_image(img, caption=None):
-    """Safely renders image across all Streamlit versions without TypeError."""
+    """Safely renders image across all Streamlit versions without TypeError or deprecation warnings."""
     try:
-        st.image(img, caption=caption, use_column_width=True)
+        st.image(img, caption=caption, use_container_width=True)
     except TypeError:
         try:
-            st.image(img, caption=caption, use_container_width=True)
+            st.image(img, caption=caption, use_column_width=True)
         except Exception:
             st.image(img, caption=caption)
 
