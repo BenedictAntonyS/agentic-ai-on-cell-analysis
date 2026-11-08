@@ -1,0 +1,21 @@
+{
+  "dataset_name": "Synthetic SH-SY5Y-like Demonstration Sequence",
+  "is_synthetic": true,
+  "label": "[Synthetic Demo Sequence]",
+  "disclaimer": "This sequence was synthetically generated to demonstrate the time-series pipeline, segmentation, and evaluation workflow offline without requiring multi-gigabyte LIVECell raw archives. It is NOT real clinical or laboratory data.",
+  "frames": [
+    "frame_00h.png",
+    "frame_04h.png",
+    "frame_08h.png",
+    "frame_12h.png"
+  ],
+  "target_frame": "frame_16h_target.png",
+  "target_mask": "frame_16h_target_mask.png",
+  "time_intervals_hours": [
+    0,
+    4,
+    8,
+    12,
+    16
+  ]
+}
